@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whale Bot — Backtest Lab</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg:       #090c10;
+    --surface:  #0f1318;
+    --border:   #1c2230;
+    --accent:   #00e5a0;
+    --accent2:  #0088ff;
+    --danger:   #ff3e5e;
+    --warn:     #ffb800;
+    --text:     #c8d8e8;
+    --muted:    #4a5a6a;
+    --mono:     'Space Mono', monospace;
+    --sans:     'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,229,160,.03) 39px, rgba(0,229,160,.03) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,229,160,.03) 39px, rgba(0,229,160,.03) 40px);
+    pointer-events: none; z-index: 0;
+  }
+
+  .shell { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 0 24px 60px; }
+
+  /* Header */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 28px 0 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
+  .logo {
+    font-size: 13px; font-family: var(--mono); color: var(--accent);
+    letter-spacing: .12em; text-transform: uppercase;
+  }
+  .logo span { color: var(--muted); }
+  .badge {
+    font-family: var(--mono); font-size: 11px;
+    background: rgba(0,229,160,.1); color: var(--accent);
+    border: 1px solid rgba(0,229,160,.3);
+    padding: 4px 10px; border-radius: 4px; letter-spacing: .08em;
+  }
+
+  /* Two-column layout */
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  /* Panel */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono); font-size: 11px;
+    color: var(--muted); letter-spacing: .1em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-head::before {
+    content: ''; display: block; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+  }
+  .panel-body { padding: 18px; }
+
+  /* Form controls */
+  label { display: block; font-size: 11px; font-family: var(--mono); color: var(--muted);
+    letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; margin-top: 16px; }
+  label:first-child { margin-top: 0; }
+
+  input[type=text], input[type=number], input[type=password], textarea, select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 13px;
+    padding: 9px 12px; border-radius: 4px; outline: none;
+    transition: border-color .15s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; }
+
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 11px 16px;
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    letter-spacing: .1em; text-transform: uppercase;
+    border: none; border-radius: 4px; cursor: pointer;
+    transition: all .15s;
+  }
+  .btn-primary {
+    background: var(--accent); color: #030a06;
+  }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; filter: none; }
+  .btn-ghost {
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger {
+    background: transparent; color: var(--danger);
+    border: 1px solid rgba(255,62,94,.3);
+  }
+  .btn-danger:hover { background: rgba(255,62,94,.08); }
+
+  /* Progress bar */
+  .progress-wrap { margin-top: 14px; display: none; }
+  .progress-label { font-family: var(--mono); font-size: 11px; color: var(--muted);
+    display: flex; justify-content: space-between; margin-bottom: 6px; }
+  .progress-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .progress-fill {
+    height: 100%; width: 0%; background: var(--accent);
+    border-radius: 2px;
+    transition: width .3s ease;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  /* Log */
+  .log {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 10px 12px;
+    min-height: 70px; max-height: 140px; overflow-y: auto;
+    margin-top: 14px; display: none;
+  }
+  .log-line { padding: 2px 0; }
+  .log-line.ok  { color: var(--accent); }
+  .log-line.err { color: var(--danger); }
+  .log-line.warn { color: var(--warn); }
+
+  /* Stats grid */
+  .stats-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 16px;
+  }
+  .stat-label { font-family: var(--mono); font-size: 10px; color: var(--muted);
+    letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+  .stat-val {
+    font-family: var(--mono); font-size: 22px; font-weight: 700;
+    color: var(--text); line-height: 1;
+  }
+  .stat-val.pos { color: var(--accent); }
+  .stat-val.neg { color: var(--danger); }
+  .stat-sub { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+  /* Chart */
+  .chart-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 18px; margin-bottom: 20px;
+    position: relative;
+  }
+  .chart-title {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    letter-spacing: .1em; text-transform: uppercase; margin-bottom: 16px;
+  }
+  .chart-canvas { width: 100% !important; }
+
+  /* Trade table */
+  .trade-table-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden;
+  }
+  .trade-table {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--mono); font-size: 12px;
+  }
+  .trade-table th {
+    padding: 10px 14px; text-align: left;
+    font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase;
+    border-bottom: 1px solid var(--border); background: var(--bg);
+  }
+  .trade-table td { padding: 9px 14px; border-bottom: 1px solid rgba(28,34,48,.6); }
+  .trade-table tr:last-child td { border-bottom: none; }
+  .trade-table tr:hover td { background: rgba(255,255,255,.02); }
+  .tag {
+    display: inline-block; padding: 2px 7px; border-radius: 3px;
+    font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+  }
+  .tag-long  { background: rgba(0,229,160,.12); color: var(--accent); }
+  .tag-short { background: rgba(255,62,94,.12);  color: var(--danger); }
+  .tag-tp2   { background: rgba(0,136,255,.12);  color: var(--accent2); }
+  .tag-sl    { background: rgba(255,62,94,.08);  color: var(--danger); }
+  .tag-tp1   { background: rgba(0,229,160,.08);  color: var(--accent); }
+
+  /* Session list */
+  .session-item {
+    padding: 12px 14px; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background .1s;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .session-item:last-child { border-bottom: none; }
+  .session-item:hover { background: rgba(255,255,255,.02); }
+  .session-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .dot-done    { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
+  .dot-running { background: var(--warn);   box-shadow: 0 0 5px var(--warn); animation: pulse 1s infinite; }
+  .dot-pending { background: var(--muted); }
+  .dot-error   { background: var(--danger); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .session-label { font-family: var(--mono); font-size: 12px; flex: 1; }
+  .session-meta  { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+  /* Placeholder */
+  .placeholder {
+    text-align: center; padding: 60px 20px;
+    font-family: var(--mono); color: var(--muted); font-size: 13px;
+  }
+  .placeholder-icon { font-size: 32px; margin-bottom: 12px; opacity: .4; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 18px; }
+  .tab {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; padding: 7px 14px; border-radius: 4px;
+    cursor: pointer; border: 1px solid transparent; color: var(--muted);
+    transition: all .12s;
+  }
+  .tab.active { border-color: var(--accent); color: var(--accent);
+    background: rgba(0,229,160,.07); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* Divider */
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+  /* Upload area */
+  .upload-drop {
+    border: 1px dashed var(--border); border-radius: 6px;
+    padding: 20px; text-align: center; cursor: pointer;
+    transition: border-color .15s; font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+  .upload-drop:hover, .upload-drop.drag { border-color: var(--accent); color: var(--accent); }
+  .upload-drop input { display: none; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">WHALE<span>.</span>BOT <span>// backtest lab</span></div>
+    <div class="badge">PAPER ENGINE v2</div>
+  </header>
+
+  <div class="layout">
+
+    <!-- ── Left panel: controls ── -->
+    <div>
+
+      <!-- API config -->
+      <div class="panel" style="margin-bottom:16px">
+        <div class="panel-head">Config</div>
+        <div class="panel-body">
+          <label>API Secret (CRON_SECRET)</label>
+          <input type="password" id="apiSecret" placeholder="your-cron-secret" />
+          <label>API Base URL</label>
+          <input type="text" id="apiBase" value="" placeholder="https://your-app.vercel.app" />
+        </div>
+      </div>
+
+      <!-- Dataset upload -->
+      <div class="panel" style="margin-bottom:16px">
+        <div class="panel-head">Dataset Upload</div>
+        <div class="panel-body">
+          <label>Dataset Key</label>
+          <input type="text" id="datasetKey" value="btc_15m" />
+          <label>OHLCV JSON File</label>
+          <div class="upload-drop" id="dropzone" onclick="document.getElementById('fileInput').click()">
+            <input type="file" id="fileInput" accept=".json">
+            <div id="dropLabel">Drop JSON or click to browse<br><span style="font-size:10px;opacity:.5">Array of {timestamp,open,high,low,close,vol}</span></div>
+          </div>
+          <div style="margin-top:10px">
+            <button class="btn btn-ghost" id="uploadBtn" onclick="uploadDataset()">Upload to Redis</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Run backtest -->
+      <div class="panel" style="margin-bottom:16px">
+        <div class="panel-head">Run Backtest</div>
+        <div class="panel-body">
+          <label>Label</label>
+          <input type="text" id="runLabel" value="BTC 15m — Full" />
+          <label>Dataset Key</label>
+          <input type="text" id="runDatasetKey" value="btc_15m" />
+          <label>Chunk Size (bars per call)</label>
+          <input type="number" id="chunkSize" value="150" min="50" max="200" />
+          <div style="margin-top:16px">
+            <button class="btn btn-primary" id="runBtn" onclick="startBacktest()">
+              <span>▶</span> Run Backtest
+            </button>
+          </div>
+          <div class="progress-wrap" id="progressWrap">
+            <div class="progress-label">
+              <span id="progressLabel">Processing…</span>
+              <span id="progressPct">0%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+          </div>
+          <div class="log" id="runLog"></div>
+          <div style="margin-top:10px; display:none" id="abortWrap">
+            <button class="btn btn-danger" onclick="abortBacktest()">■ Abort</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Session list -->
+      <div class="panel">
+        <div class="panel-head">Recent Sessions</div>
+        <div id="sessionList">
+          <div class="placeholder">
+            <div class="placeholder-icon">◉</div>
+            No sessions yet
+          </div>
+        </div>
+        <div class="panel-body" style="padding-top:10px">
+          <button class="btn btn-ghost" onclick="loadSessions()">↻ Refresh</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right panel: results ── -->
+    <div>
+      <div class="tabs">
+        <div class="tab active" onclick="showTab('overview')">Overview</div>
+        <div class="tab" onclick="showTab('trades')">Trade Log</div>                                                <div class="tab" onclick="showTab('equity')">Equity Curve</div>                                           </div>                                                                                                      <!-- Overview tab -->                                 <div id="tab-overview">                                 <div id="statsArea">                                    <div class="placeholder">                               <div class="placeholder-icon">⟳</div>
+            Run a backtest or select a session to see results
+          </div>
+        </div>
+      </div>
+
+      <!-- Trades tab -->
+      <div id="tab-trades" style="display:none">              <div class="trade-table-wrap" id="tradeTableWrap">
+          <div class="placeholder">
+            <div class="placeholder-icon">◈</div>
+            No trade data                                       </div>                                              </div>
+      </div>
+
+      <!-- Equity curve tab -->
+      <div id="tab-equity" style="display:none">
+        <div class="chart-wrap">
+          <div class="chart-title">Equity Curve — account balance over time</div>
+          <canvas id="equityChart" class="chart-canvas" height="260"></canvas>                                      </div>
+      </div>
+    </div>
+                                                        </div><!-- /.layout -->
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────                                           let running = false;
+let aborted = false;
+let equityChart = null;
+let pendingFile = null;                               
+// ─── Helpers ──────────────────────────────────────────────────
+function base() {
+  const b = document.getElementById('apiBase').value.trim().replace(/\/$/, '');
+  return b || '';
+}
+function secret() { return document.getElementById('apiSecret').value.trim(); }                             
+function headers() {                                    return { 'Content-Type':'application/json', 'x-cron-secret': secret() };
+}                                                                                                           function log(msg, type='') {
+  const el = document.getElementById('runLog');
+  el.style.display = 'block';
+  const line = document.createElement('div');
+  line.className = 'log-line ' + type;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;                     }
+
+function showTab(name) {                                ['overview','trades','equity'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t === name ? '' : 'none';
+  });                                                   document.querySelectorAll('.tab').forEach((el, i) => {                                                        el.classList.toggle('active', ['overview','trades','equity'][i] === name);                                });                                                 }
+
+// ─── File upload ───────────────────────────────────────────────                                          const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));                            dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});                                                   fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+                                                      function handleFile(file) {
+  pendingFile = file;                                   document.getElementById('dropLabel').innerHTML =
+    `<span style="color:var(--accent)">${file.name}</span><br><span style="font-size:10px;opacity:.5">${(file.size/1024).toFixed(1)} KB</span>`;
+}                                                     
+async function uploadDataset() {                        if (!pendingFile) { alert('Select a JSON file first.'); return; }
+  const key = document.getElementById('datasetKey').value.trim();
+  if (!key) { alert('Enter a dataset key.'); return; }
+
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true; btn.textContent = 'Uploading…';
+  try {                                                   const text = await pendingFile.text();
+    const bars = JSON.parse(text);                        if (!Array.isArray(bars)) throw new Error('JSON must be an array of bars');
+                                                          const res = await fetch(`${base()}/api/backtest/upload`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ key, bars })
+    });
+    const data = await res.json();                        if (!res.ok) throw new Error(data.error || res.statusText);
+    alert(`✓ Uploaded ${data.bars} bars under key "${key}"`);
+  } catch (err) {
+    alert('Upload failed: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Upload to Redis';
+  }
+}
+
+// ─── Run backtest ──────────────────────────────────────────────
+async function startBacktest() {
+  if (running) return;                                  running = true; aborted = false;
+
+  const runBtn    = document.getElementById('runBtn');
+  const abortWrap = document.getElementById('abortWrap');
+  const progressW = document.getElementById('progressWrap');
+  const logEl     = document.getElementById('runLog');
+
+  runBtn.disabled = true;
+  abortWrap.style.display = 'block';
+  progressW.style.display = 'block';
+  logEl.innerHTML = ''; logEl.style.display = 'block';
+                                                        const datasetKey = document.getElementById('runDatasetKey').value.trim();
+  const label      = document.getElementById('runLabel').value.trim() || 'Backtest';
+  const chunkSize  = parseInt(document.getElementById('chunkSize').value) || 150;
+                                                        log(`Starting: dataset="${datasetKey}", chunk=${chunkSize}`);
+                                                        let sessionId = null;
+  let done = false;                                   
+  try {                                                   while (!done && !aborted) {
+      const body = { datasetKey, label, chunkSize };        if (sessionId) body.sessionId = sessionId;
+
+      const res = await fetch(`${base()}/api/backtest/run`, {
+        method: 'POST', headers: headers(), body: JSON.stringify(body)                                            });
+      const data = await res.json();                        if (!res.ok) throw new Error(data.error || res.statusText);                                           
+      if (!sessionId) {                                       sessionId = data.sessionId;
+        log(`Session: ${sessionId}`, 'ok');                 }
+                                                            done = data.done;
+                                                            if (!done) {
+        const pct = data.progressPct ?? 0;                    document.getElementById('progressFill').style.width = pct + '%';                                            document.getElementById('progressPct').textContent  = pct + '%';                                            document.getElementById('progressLabel').textContent =
+          `${data.processedBars} / ${data.totalBars} bars`;
+        if (data.processedBars % 600 < chunkSize) log(`Progress: ${pct}%`);                                       } else {
+        document.getElementById('progressFill').style.width = '100%';                                               document.getElementById('progressPct').textContent  = '100%';                                               document.getElementById('progressLabel').textContent = 'Complete!';                                         log('Backtest complete!', 'ok');
+        if (data.results) renderResults(data.results);
+      }                                               
+      // Small yield so UI can breathe                      await new Promise(r => setTimeout(r, 60));
+    }                                                 
+    if (aborted) log('Aborted by user.', 'warn');         else loadSessions();
+
+  } catch (err) {
+    log('Error: ' + err.message, 'err');
+  } finally {                                             running = false;
+    runBtn.disabled = false;
+    abortWrap.style.display = 'none';
+  }                                                   }
+                                                      function abortBacktest() { aborted = true; }          
+// ─── Render results ────────────────────────────────────────────
+function renderResults(r) {                             showTab('overview');
+
+  const pnlClass = r.totalPnlPct >= 0 ? 'pos' : 'neg';
+  const pnlSign  = r.totalPnlPct >= 0 ? '+' : '';
+
+  document.getElementById('statsArea').innerHTML = `
+    <div class="stats-grid">                                <div class="stat">
+        <div class="stat-label">Total PnL</div>               <div class="stat-val ${pnlClass}">${pnlSign}${r.totalPnlPct.toFixed(2)}%</div>
+        <div class="stat-sub">$${r.finalBalance.toLocaleString()} final balance</div>
+      </div>
+      <div class="stat">                                      <div class="stat-label">Win Rate</div>
+        <div class="stat-val">${(r.winRate * 100).toFixed(1)}%</div>
+        <div class="stat-sub">${r.wins}W / ${r.losses}L of ${r.totalTrades} trades</div>                          </div>
+      <div class="stat">
+        <div class="stat-label">Profit Factor</div>           <div class="stat-val ${r.profitFactor >= 1.5 ? 'pos' : r.profitFactor < 1 ? 'neg' : ''}">${r.profitFactor.toFixed(2)}</div>
+        <div class="stat-sub">≥ 1.5 is good</div>           </div>
+      <div class="stat">                                      <div class="stat-label">Max Drawdown</div>
+        <div class="stat-val neg">${r.maxDrawdownPct.toFixed(2)}%</div>
+        <div class="stat-sub">from peak equity</div>        </div>
+      <div class="stat">                                      <div class="stat-label">Sharpe (approx)</div>         <div class="stat-val ${r.sharpeApprox >= 1 ? 'pos' : r.sharpeApprox < 0 ? 'neg' : ''}">${r.sharpeApprox.toFixed(2)}</div>
+        <div class="stat-sub">per-trade ratio</div>
+      </div>                                                <div class="stat">
+        <div class="stat-label">Total Trades</div>
+        <div class="stat-val">${r.totalTrades}</div>
+        <div class="stat-sub">${r.wins} winners · ${r.losses} losers</div>
+      </div>
+    </div>
+  `;                                                                                                          // Equity curve
+  renderEquityChart(r.equityCurve);                   
+  // Trade table                                        renderTradeTable(r.trades || []);
+}
+
+function renderEquityChart(curve) {
+  const ctx = document.getElementById('equityChart').getContext('2d');                                        if (equityChart) equityChart.destroy();
+
+  const labels = curve.map((_, i) => `${i * 50}`);
+  const initial = curve[0] || 10000;
+  const colors  = curve.map(v => v >= initial ? 'rgba(0,229,160,1)' : 'rgba(255,62,94,1)');
+                                                        equityChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: curve,
+        borderColor: 'rgba(0,229,160,.8)',
+        backgroundColor: 'rgba(0,229,160,.06)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.3,
+      }]                                                  },
+    options: {
+      responsive: true,                                     animation: { duration: 400 },
+      plugins: { legend: { display: false }, tooltip: {
+        backgroundColor: '#0f1318',                           borderColor: '#1c2230', borderWidth: 1,
+        titleFont: { family: "'Space Mono'" },                bodyFont:  { family: "'Space Mono'" },
+        callbacks: {
+          label: ctx => `$${ctx.parsed.y.toLocaleString(undefined, {minimumFractionDigits:2})}`
+        }
+      }},
+      scales: {
+        x: { ticks: { color:'#4a5a6a', font:{family:"'Space Mono'",size:10} }, grid:{color:'rgba(28,34,48,.6)'} },
+        y: { ticks: { color:'#4a5a6a', font:{family:"'Space Mono'",size:10},                                          callback: v => '$'+v.toLocaleString() }, grid:{color:'rgba(28,34,48,.6)'} }
+      }
+    }                                                   });                                                 }
+                                                      function renderTradeTable(trades) {                     if (!trades.length) {
+    document.getElementById('tradeTableWrap').innerHTML = `
+      <div class="placeholder"><div class="placeholder-icon">◈</div>No trades recorded</div>`;
+    return;                                             }
+                                                        const rows = trades.slice(-200).reverse().map(t => {
+    const pnlClass = t.pnlPct >= 0 ? 'pos' : 'neg';
+    const sign     = t.pnlPct >= 0 ? '+' : '';
+    const reasonTag = t.reason === 'tp2' ? 'tag-tp2' : t.reason === 'sl' ? 'tag-sl' : 'tag-tp1';
+    return `<tr>                                            <td class="tag tag-${t.direction}">${t.direction.toUpperCase()}</td>
+      <td>$${t.entry.toFixed(2)}</td>
+      <td>$${t.exit.toFixed(2)}</td>
+      <td class="${pnlClass}">${sign}${t.pnlPct.toFixed(2)}%</td>
+      <td><span class="tag ${reasonTag}">${t.reason.toUpperCase()}</span></td>
+      <td style="color:var(--muted)">bar ${t.bar}</td>
+    </tr>`;                                             }).join('');
+
+  document.getElementById('tradeTableWrap').innerHTML = `                                                       <table class="trade-table">
+      <thead><tr>
+        <th>DIR</th><th>ENTRY</th><th>EXIT</th><th>PNL%</th><th>REASON</th><th>BAR</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;                                        }
+
+// ─── Session list ──────────────────────────────────────────────                                          async function loadSessions() {
+  try {
+    const res  = await fetch(`${base()}/api/backtest/results`, { headers: { 'x-cron-secret': secret() } });
+    const data = await res.json();
+    const sessions = (data.sessions || []).filter(Boolean);                                                                                                           if (!sessions.length) {                                 document.getElementById('sessionList').innerHTML = `
+        <div class="placeholder"><div class="placeholder-icon">◉</div>No sessions yet</div>`;
+      return;                                             }
+
+    document.getElementById('sessionList').innerHTML = sessions.map(s => `
+      <div class="session-item" onclick="loadSession('${s.id}')">
+        <div class="session-dot dot-${s.status}"></div>
+        <div>
+          <div class="session-label">${s.label || s.id}</div>                                                         <div class="session-meta">${s.processedBars}/${s.totalBars} bars · ${s.status}</div>                      </div>
+        <div class="session-meta">${s.finishedAt ? new Date(s.finishedAt).toLocaleTimeString() : ''}</div>
+      </div>                                              `).join('');
+  } catch (err) {                                         document.getElementById('sessionList').innerHTML =
+      `<div class="placeholder" style="color:var(--danger)">Failed to load sessions</div>`;
+  }
+}
+
+async function loadSession(id) {
+  try {
+    const res  = await fetch(`${base()}/api/backtest/results?sessionId=${id}`, {
+      headers: { 'x-cron-secret': secret() }
+    });
+    const data = await res.json();
+    if (data.results) renderResults(data.results);
+    else alert('Session has no results yet (still running or pending).');
+  } catch (err) {
+    alert('Failed to load session: ' + err.message);
+  }
+}
+
+// ─── Init ──────────────────────────────────────────────────────
+loadSessions();
+</script>
+</body>                                               </html>
