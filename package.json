@@ -1,0 +1,25 @@
+{
+  "name": "whale-bot",
+  "version": "1.0.0",
+  "description": "Institutional Whale Sweep Trading Bot - MVP",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "tsc --noEmit",
+    "lint": "eslint . --ext .ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.28.0",
+    "axios": "^1.6.0",
+    "crypto-js": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vercel/node": "^3.0.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

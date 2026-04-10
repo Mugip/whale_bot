@@ -1,0 +1,202 @@
+// ─────────────────────────────────────────────────────────────
+// lib/indicators.ts
+// Deterministic technical indicators: RSI, ATR, volume ratio.
+// All functions are pure – input arrays, output numbers.
+// ─────────────────────────────────────────────────────────────
+
+import { OKXCandle } from "./okx";
+
+// ─── RSI ─────────────────────────────────────────────────────
+
+/**
+ * Computes RSI values for the entire candle array.
+ * @param candles  Oldest-first OHLCV candles
+ * @param period   Default 14
+ * @returns        Array of RSI values, same length as input
+ *                 (first `period` entries are NaN)
+ */
+export function computeRSI(candles: OKXCandle[], period: number = 14): number[] {
+  const closes = candles.map((c) => c.close);
+  const rsi: number[] = new Array(closes.length).fill(NaN);
+
+  if (closes.length < period + 1) return rsi;
+
+  let avgGain = 0;
+  let avgLoss = 0;
+
+  // Seed with first period
+  for (let i = 1; i <= period; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff >= 0) {
+      avgGain += diff;
+    } else {
+      avgLoss += Math.abs(diff);
+    }
+  }
+
+  avgGain /= period;
+  avgLoss /= period;
+
+  rsi[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+
+  // Wilder's smoothing for remaining candles
+  for (let i = period + 1; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    const gain = diff > 0 ? diff : 0;
+    const loss = diff < 0 ? Math.abs(diff) : 0;
+
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+
+    rsi[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+
+  return rsi;
+}
+
+// ─── RSI Divergence ──────────────────────────────────────────
+
+export interface DivergenceResult {
+  bullish: boolean; // price lower-low, RSI higher-low
+  bearish: boolean; // price higher-high, RSI lower-high
+}
+
+/**
+ * Detects the most recent RSI divergence using the last two
+ * pivot lows/highs in the price and RSI series.
+ *
+ * Uses a simple swing-point definition:
+ *   - Swing low: candle whose low is lower than both neighbours
+ *   - Swing high: candle whose high is higher than both neighbours
+ */
+export function detectRSIDivergence(
+  candles: OKXCandle[],
+  rsiValues: number[]
+): DivergenceResult {
+  const n = candles.length;
+
+  // Find the two most recent swing lows (for bullish divergence)
+  const swingLows: number[] = [];
+  for (let i = 1; i < n - 1; i++) {
+    if (
+      candles[i].low < candles[i - 1].low &&
+      candles[i].low < candles[i + 1].low
+    ) {
+      swingLows.push(i);
+    }
+  }
+
+  // Find the two most recent swing highs (for bearish divergence)
+  const swingHighs: number[] = [];
+  for (let i = 1; i < n - 1; i++) {
+    if (
+      candles[i].high > candles[i - 1].high &&
+      candles[i].high > candles[i + 1].high
+    ) {
+      swingHighs.push(i);
+    }
+  }
+
+  let bullish = false;
+  let bearish = false;
+
+  // Bullish: last two swing lows — price makes lower-low, RSI makes higher-low
+  if (swingLows.length >= 2) {
+    const prevLowIdx = swingLows[swingLows.length - 2];
+    const currLowIdx = swingLows[swingLows.length - 1];
+
+    const priceLowerLow =
+      candles[currLowIdx].low < candles[prevLowIdx].low;
+    const rsiHigherLow =
+      !isNaN(rsiValues[currLowIdx]) &&
+      !isNaN(rsiValues[prevLowIdx]) &&
+      rsiValues[currLowIdx] > rsiValues[prevLowIdx];
+
+    bullish = priceLowerLow && rsiHigherLow;
+  }
+
+  // Bearish: last two swing highs — price makes higher-high, RSI makes lower-high
+  if (swingHighs.length >= 2) {
+    const prevHighIdx = swingHighs[swingHighs.length - 2];
+    const currHighIdx = swingHighs[swingHighs.length - 1];
+
+    const priceHigherHigh =
+      candles[currHighIdx].high > candles[prevHighIdx].high;
+    const rsiLowerHigh =
+      !isNaN(rsiValues[currHighIdx]) &&
+      !isNaN(rsiValues[prevHighIdx]) &&
+      rsiValues[currHighIdx] < rsiValues[prevHighIdx];
+
+    bearish = priceHigherHigh && rsiLowerHigh;
+  }
+
+  return { bullish, bearish };
+}
+
+// ─── ATR ─────────────────────────────────────────────────────
+
+/**
+ * Computes the Average True Range (ATR) using Wilder's smoothing.
+ * @param candles  Oldest-first OHLCV candles
+ * @param period   Default 14
+ * @returns        Most recent ATR value
+ */
+export function computeATR(candles: OKXCandle[], period: number = 14): number {
+  if (candles.length < period + 1) {
+    // Fallback: simple high-low range of last candle
+    const last = candles[candles.length - 1];
+    return last.high - last.low;
+  }
+
+  // True range for each candle
+  const trValues: number[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    const high = candles[i].high;
+    const low = candles[i].low;
+    const prevClose = candles[i - 1].close;
+
+    const tr = Math.max(
+      high - low,
+      Math.abs(high - prevClose),
+      Math.abs(low - prevClose)
+    );
+    trValues.push(tr);
+  }
+
+  // Seed ATR with simple average of first `period` TRs
+  let atr = trValues.slice(0, period).reduce((a, b) => a + b, 0) / period;
+
+  // Wilder's smoothing for the rest
+  for (let i = period; i < trValues.length; i++) {
+    atr = (atr * (period - 1) + trValues[i]) / period;
+  }
+
+  return atr;
+}
+
+// ─── Volume Ratio ────────────────────────────────────────────
+
+/**
+ * Computes current-candle volume divided by the average volume
+ * of the previous N candles (excluding the current one).
+ *
+ * @param candles  Oldest-first OHLCV candles
+ * @param lookback Number of candles to average (default 20)
+ * @returns        Volume ratio (current / avg). Returns 0 if not enough data.
+ */
+export function computeVolumeRatio(
+  candles: OKXCandle[],
+  lookback: number = 20
+): number {
+  if (candles.length < lookback + 1) return 0;
+
+  const current = candles[candles.length - 1];
+  const previous = candles.slice(-(lookback + 1), -1);
+
+  const avgVolume =
+    previous.reduce((sum, c) => sum + c.vol, 0) / previous.length;
+
+  if (avgVolume === 0) return 0;
+
+  return current.vol / avgVolume;
+}

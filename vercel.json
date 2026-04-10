@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "@vercel/node",
+      "maxDuration": 60
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/cron/check-signals",
+      "dest": "/api/cron/check-signals.ts"
+    },
+    {
+      "src": "/api/trade/execute",
+      "dest": "/api/trade/execute.ts"
+    },
+    {
+      "src": "/api/state/get",
+      "dest": "/api/state/get.ts"
+    },
+    {
+      "src": "/api/health/ping",
+      "dest": "/api/health/ping.ts"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
