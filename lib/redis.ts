@@ -1,44 +1,38 @@
 // ─────────────────────────────────────────────────────────────
 // lib/redis.ts
-// Redis state persistence layer (Supports Vercel KV & Upstash).
+// Standard Redis connection for Bot State
 // ─────────────────────────────────────────────────────────────
 
-import { Redis } from "@upstash/redis";
+import Redis from "ioredis";
 import { BotState, createDefaultState } from "../state/schema";
 
 const STATE_KEY = "whale_bot:state";
 
-function getRedisClient(): Redis {
-  // Look for Vercel KV first, fallback to Upstash
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-
-  if (!url || !token) {
-    throw new Error("Missing Redis credentials (KV_REST_API_URL / KV_REST_API_TOKEN)");
+async function withRedis<T>(action: (redis: Redis) => Promise<T>): Promise<T> {
+  const url = process.env.REDIS_URL;
+  if (!url) throw new Error("Missing REDIS_URL environment variable");
+  
+  const redis = new Redis(url);
+  try {
+    return await action(redis);
+  } finally {
+    redis.quit(); // Crucial for Vercel Serverless!
   }
-
-  return new Redis({ url, token });
 }
 
 export async function loadState(): Promise<BotState> {
-  try {
-    const redis = getRedisClient();
-    const raw = await redis.get<BotState>(STATE_KEY);
+  return withRedis(async (redis) => {
+    const raw = await redis.get(STATE_KEY);
     if (!raw) return createDefaultState();
-    return raw as BotState;
-  } catch (err) {
-    throw err;
-  }
+    return JSON.parse(raw) as BotState;
+  });
 }
 
 export async function saveState(state: BotState): Promise<void> {
-  try {
-    const redis = getRedisClient();
+  return withRedis(async (redis) => {
     state.lastUpdated = Date.now();
-    await redis.set(STATE_KEY, state);
-  } catch (err) {
-    throw err;
-  }
+    await redis.set(STATE_KEY, JSON.stringify(state));
+  });
 }
 
 export async function resetState(): Promise<BotState> {
