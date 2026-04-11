@@ -1,15 +1,15 @@
 // ─────────────────────────────────────────────────────────────
 // lib/backtestRedis.ts
-// Redis helpers scoped specifically to backtest state.
+// Standard Redis connection for Backtest Engine
 // ─────────────────────────────────────────────────────────────
 
-import { Redis } from "@upstash/redis";
+import Redis from "ioredis";
 
-function getRedis(): Redis {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) throw new Error("Missing Redis env vars");
-  return new Redis({ url, token });
+async function withRedis<T>(action: (redis: Redis) => Promise<T>): Promise<T> {
+  const url = process.env.REDIS_URL;
+  if (!url) throw new Error("Missing REDIS_URL environment variable");
+  const redis = new Redis(url);
+  try { return await action(redis); } finally { redis.quit(); }
 }
 
 const K = {
@@ -27,44 +27,54 @@ export interface BacktestSession {
 }
 
 export async function createSession(id: string, label: string, datasetKey: string, totalBars: number): Promise<void> {
-  const r = getRedis();
-  const session: BacktestSession = { id, label, datasetKey, totalBars, processedBars: 0, status: "pending", startedAt: Date.now() };
-  await r.set(K.session(id), session, { ex: 86400 });
-  await r.lpush(K.list, id);
-  await r.ltrim(K.list, 0, 49);
+  await withRedis(async (r) => {
+    const session: BacktestSession = { id, label, datasetKey, totalBars, processedBars: 0, status: "pending", startedAt: Date.now() };
+    await r.set(K.session(id), JSON.stringify(session), "EX", 86400);
+    await r.lpush(K.list, id);
+    await r.ltrim(K.list, 0, 49);
+  });
 }
 
 export async function getSession(id: string): Promise<BacktestSession | null> {
-  return getRedis().get<BacktestSession>(K.session(id));
+  return withRedis(async (r) => {
+    const data = await r.get(K.session(id));
+    return data ? JSON.parse(data) : null;
+  });
 }
 
 export async function updateSession(id: string, patch: Partial<BacktestSession>): Promise<void> {
-  const r = getRedis();
-  const existing = await r.get<BacktestSession>(K.session(id));
-  if (!existing) return;
-  await r.set(K.session(id), { ...existing, ...patch }, { ex: 86400 });
+  await withRedis(async (r) => {
+    const data = await r.get(K.session(id));
+    if (!data) return;
+    const existing = JSON.parse(data);
+    await r.set(K.session(id), JSON.stringify({ ...existing, ...patch }), "EX", 86400);
+  });
 }
 
 export async function listSessions(): Promise<BacktestSession[]> {
-  const r = getRedis();
-  const ids = await r.lrange<string>(K.list, 0, 49);
-  if (!ids.length) return [];
-  const sessions = await Promise.all(ids.map((id) => r.get<BacktestSession>(K.session(id))));
-  return sessions.filter(Boolean) as BacktestSession[];
+  return withRedis(async (r) => {
+    const ids = await r.lrange(K.list, 0, 49);
+    if (!ids.length) return [];
+    const sessions = await Promise.all(ids.map(id => r.get(K.session(id))));
+    return sessions.filter(Boolean).map(s => JSON.parse(s!)) as BacktestSession[];
+  });
 }
 
 export interface ChunkState {
   nextIndex: number; balance: number; peakBalance: number; wins: number; losses: number;
-  totalPnlPct: number; equityCurve: number[]; 
+  totalPnlPct: number; equityCurve: number[];
   trade: null | { direction: "long" | "short"; entry: number; stop: number; tp1: number; tp2: number; tp1Hit: boolean; size: number; notional: number; };
 }
 
 export async function saveChunkState(id: string, state: ChunkState): Promise<void> {
-  await getRedis().set(K.progress(id), state, { ex: 86400 });
+  await withRedis(async (r) => { await r.set(K.progress(id), JSON.stringify(state), "EX", 86400); });
 }
 
 export async function loadChunkState(id: string): Promise<ChunkState | null> {
-  return getRedis().get<ChunkState>(K.progress(id));
+  return withRedis(async (r) => {
+    const data = await r.get(K.progress(id));
+    return data ? JSON.parse(data) : null;
+  });
 }
 
 export interface BacktestResults {
@@ -74,29 +84,35 @@ export interface BacktestResults {
 }
 
 export async function saveResults(id: string, results: BacktestResults): Promise<void> {
-  await getRedis().set(K.results(id), results, { ex: 86400 });
+  await withRedis(async (r) => { await r.set(K.results(id), JSON.stringify(results), "EX", 86400); });
 }
 
 export async function getResults(id: string): Promise<BacktestResults | null> {
-  return getRedis().get<BacktestResults>(K.results(id));
+  return withRedis(async (r) => {
+    const data = await r.get(K.results(id));
+    return data ? JSON.parse(data) : null;
+  });
 }
 
 export async function saveDataset(key: string, bars: any[]): Promise<void> {
   const CHUNK = 1000;
-  const r = getRedis();
-  const chunks = Math.ceil(bars.length / CHUNK);
-  for (let i = 0; i < chunks; i++) {
-    await r.set(`${K.dataset(key)}:${i}`, bars.slice(i * CHUNK, (i + 1) * CHUNK), { ex: 86400 });
-  }
-  await r.set(`${K.dataset(key)}:meta`, { length: bars.length, chunks }, { ex: 86400 });
+  await withRedis(async (r) => {
+    const chunks = Math.ceil(bars.length / CHUNK);
+    for (let i = 0; i < chunks; i++) {
+      await r.set(`${K.dataset(key)}:${i}`, JSON.stringify(bars.slice(i * CHUNK, (i + 1) * CHUNK)), "EX", 86400);
+    }
+    await r.set(`${K.dataset(key)}:meta`, JSON.stringify({ length: bars.length, chunks }), "EX", 86400);
+  });
 }
 
 export async function loadDataset(key: string): Promise<any[] | null> {
-  const r = getRedis();
-  const meta = await r.get<{ length: number; chunks: number }>(`${K.dataset(key)}:meta`);
-  if (!meta) return null;
-  const parts = await Promise.all(
-    Array.from({ length: meta.chunks }, (_, i) => r.get<any[]>(`${K.dataset(key)}:${i}`))
-  );
-  return parts.flat().filter(Boolean);
-}
+  return withRedis(async (r) => {
+    const metaStr = await r.get(`${K.dataset(key)}:meta`);
+    if (!metaStr) return null;
+    const meta = JSON.parse(metaStr);
+    const parts = await Promise.all(
+      Array.from({ length: meta.chunks }, (_, i) => r.get(`${K.dataset(key)}:${i}`))
+    );
+    return parts.map(p => p ? JSON.parse(p) : []).flat();
+  });
+  }
