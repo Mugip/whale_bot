@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { v4 as uuidv4 } from "crypto";
+import { randomUUID } from "crypto";
 import { BotState, Position, ClosedTrade, TradeDirection } from "../../state/schema";
 import { loadState, saveState } from "../../lib/redis";
 import { placeMarketOrder } from "../../lib/okx";
