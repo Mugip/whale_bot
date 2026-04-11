@@ -76,7 +76,7 @@ export function runBacktest(
     // Return the most recent 1h candle index whose ts <= bar15mTs
     let idx = 0;
     for (let i = 0; i < candles1h.length; i++) {
-      if (candles1h[i].timestamp <= bar15mTs) idx = i;
+      if (candles1h[i].ts <= bar15mTs) idx = i;
       else break;
     }
     return idx;
@@ -99,7 +99,7 @@ export function runBacktest(
     const bar = candles15m[i];
     const slice15m = candles15m.slice(0, i + 1);
 
-    const h1Idx = getH1Index(bar.timestamp);
+    const h1Idx = getH1Index(bar.ts);
     const slice1h = candles1h.slice(0, h1Idx + 1);
 
     // ── Update open trade against current bar ──────────────
