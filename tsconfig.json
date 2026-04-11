@@ -9,14 +9,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "./dist",
-    "rootDir": ".",
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
-    "paths": {
-      "@/lib/*": ["lib/*"],
-      "@/state/*": ["state/*"],
-      "@/utils/*": ["utils/*"]
-    }
+    "rootDir": "."
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist", ".vercel"]
