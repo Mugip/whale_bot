@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { v4 as uuidv4 } from "crypto";
+import { randomUUID } from "crypto";
 import {
   createSession,
   getSession,
