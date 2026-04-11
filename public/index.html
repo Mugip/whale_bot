@@ -199,7 +199,11 @@
     if (!secret) return;
 
     try {
-      const res = await fetch(`/api/state/get?secret=${secret}`);
+      // Send the secret in the Headers instead of the URL
+      const res = await fetch('/api/state/get', {
+        method: 'GET',
+        headers: { 'x-cron-secret': secret }
+      });
       const data = await res.json();
       
       if (res.ok) {
@@ -241,7 +245,11 @@
     logBox.innerText = "Scanning markets...\nFetching OKX and Etherscan data...";
 
     try {
-      const res = await fetch(`/api/cron/check-signals?secret=${secret}`);
+      // Send the secret in the Headers here as well
+      const res = await fetch('/api/cron/check-signals', {
+        method: 'GET',
+        headers: { 'x-cron-secret': secret }
+      });
       const data = await res.json();
       logBox.innerText = JSON.stringify(data, null, 2);
       fetchState(); // Refresh dashboard afterwards
