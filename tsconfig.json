@@ -10,7 +10,7 @@
     "resolveJsonModule": true,
     "outDir": "./dist",
     "rootDir": ".",
-    "ignoreDeprecations": "5.0",
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/lib/*": ["lib/*"],
