@@ -2,6 +2,7 @@
   "version": 2,
   "functions": {
     "api/**/*.ts": {
+      "runtime": "@vercel/node",
       "maxDuration": 60
     }
   },
@@ -13,7 +14,8 @@
     { "src": "/api/backtest/upload",    "dest": "/api/backtest/upload.ts" },
     { "src": "/api/backtest/run",       "dest": "/api/backtest/run.ts" },
     { "src": "/api/backtest/results",   "dest": "/api/backtest/results.ts" },
-    { "src": "/backtest",               "dest": "/public/backtest.html" }
+    { "src": "/backtest",               "dest": "/public/backtest.html" },
+    { "src": "/",                       "dest": "/public/index.html" } 
   ],
   "env": {
     "NODE_ENV": "production"
