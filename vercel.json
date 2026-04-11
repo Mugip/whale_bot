@@ -7,22 +7,14 @@
     }
   },
   "routes": [
-    {
-      "src": "/api/cron/check-signals",
-      "dest": "/api/cron/check-signals.ts"
-    },
-    {
-      "src": "/api/trade/execute",
-      "dest": "/api/trade/execute.ts"
-    },
-    {
-      "src": "/api/state/get",
-      "dest": "/api/state/get.ts"
-    },
-    {
-      "src": "/api/health/ping",
-      "dest": "/api/health/ping.ts"
-    }
+    { "src": "/api/cron/check-signals", "dest": "/api/cron/check-signals.ts" },
+    { "src": "/api/trade/execute",      "dest": "/api/trade/execute.ts" },
+    { "src": "/api/state/get",          "dest": "/api/state/get.ts" },
+    { "src": "/api/health/ping",        "dest": "/api/health/ping.ts" },
+    { "src": "/api/backtest/upload",    "dest": "/api/backtest/upload.ts" },
+    { "src": "/api/backtest/run",       "dest": "/api/backtest/run.ts" },
+    { "src": "/api/backtest/results",   "dest": "/api/backtest/results.ts" },
+    { "src": "/backtest",               "dest": "/public/backtest.html" }
   ],
   "env": {
     "NODE_ENV": "production"
