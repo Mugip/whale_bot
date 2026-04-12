@@ -69,6 +69,20 @@ export function runChunk(
       const t = state.trade;
       const isLong = t.direction === "long";
 
+      // --- Trailing Stop Logic ---
+      const TRAILING_ACTIVATION_PCT = 0.015; // 1.5%
+      const TRAILING_DISTANCE_PCT = 0.005;   // 0.5%
+      const trailActPrice = isLong ? t.entry * (1 + TRAILING_ACTIVATION_PCT) : t.entry * (1 - TRAILING_ACTIVATION_PCT);
+      
+      if (isLong && bar.high >= trailActPrice) {
+          const newStop = bar.close * (1 - TRAILING_DISTANCE_PCT);
+          if (newStop > t.stop) t.stop = newStop;
+      } else if (!isLong && bar.low <= trailActPrice) {
+          const newStop = bar.close * (1 + TRAILING_DISTANCE_PCT);
+          if (newStop < t.stop) t.stop = newStop;
+      }
+      // ---------------------------
+
       const slHit  = isLong ? bar.low  <= t.stop : bar.high >= t.stop;
       const tp1Hit = isLong ? bar.high >= t.tp1  : bar.low  <= t.tp1;
       const tp2Hit = isLong ? bar.high >= t.tp2  : bar.low  <= t.tp2;
@@ -82,8 +96,8 @@ export function runChunk(
         state.balance += t.notional * TP1_CLOSE_FRACTION * partialPnl;
         t.size     *= (1 - TP1_CLOSE_FRACTION);
         t.notional *= (1 - TP1_CLOSE_FRACTION);
-        // Move stop to break-even
-        t.stop = t.entry;
+        // Move stop to break-even (or keep trailing if higher)
+        t.stop = isLong ? Math.max(t.stop, t.entry) : Math.min(t.stop, t.entry);
       }
 
       let closed = false;
@@ -91,7 +105,7 @@ export function runChunk(
       let reason = "sl";
 
       if (slHit) {
-        exitPrice = t.stop; reason = "sl"; closed = true;
+        exitPrice = t.stop; reason = "sl/trail"; closed = true;
       } else if (t.tp1Hit && tp2Hit) {
         exitPrice = t.tp2; reason = "tp2"; closed = true;
       }
@@ -111,6 +125,8 @@ export function runChunk(
         if (state.balance > state.peakBalance) state.peakBalance = state.balance;
       }
     }
+
+    
 
     // Sample equity curve
     if (i % EQUITY_SAMPLE_EVERY === 0) {
