@@ -8,7 +8,7 @@
 
 import { OKXCandle } from "./okx";
 
-const BREAK_THRESHOLD = 0.002; // 0.2% break required
+const BREAK_THRESHOLD = 0.001; // 0.2% break required // Lowered from 0.002 (0.2% -> 0.1% break required)
 const LOOKBACK = 20;
 
 export interface SweepResult {
