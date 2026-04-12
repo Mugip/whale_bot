@@ -13,9 +13,9 @@
 
 import { TradeDirection } from "../state/schema";
 
-const STOP_BUFFER_PCT = 0.01;         // 1 % buffer beyond sweep extreme
-const TRAILING_ACTIVATION_PCT = 0.04; // activate trailing at +4 %
-const TRAILING_DISTANCE_PCT = 0.01;   // trail by 1 %
+const STOP_BUFFER_PCT = 0.005;         // 1 % buffer beyond sweep extreme // Tightened from 1% to 0.5% buffer beyond sweep
+const TRAILING_ACTIVATION_PCT = 0.015; // activate trailing at +4 % // Activate trailing at +1.5% profit (was 4%)
+const TRAILING_DISTANCE_PCT = 0.005;   // trail by 1 % // Trail price by 0.5% (was 1%)
 
 // ─── Slippage / fee constants ─────────────────────────────────
 // OKX taker fee ≈ 0.05 %; add a conservative 0.05 % for spread.
@@ -24,8 +24,8 @@ const ENTRY_FEE_PCT = 0.001;  // 0.1 % effective entry slippage+fee
 const EXIT_FEE_PCT  = 0.001;  // 0.1 % effective exit slippage+fee
 
 // ─── ATR TP multipliers ──────────────────────────────────────
-const ATR_TP1_MULT = 1.5;
-const ATR_TP2_MULT = 3.0;
+const ATR_TP1_MULT = 1.2; // Was 1.5
+const ATR_TP2_MULT = 2.5; // Was 3.0
 
 export interface RiskCalculation {
   positionSizeUsd: number;
