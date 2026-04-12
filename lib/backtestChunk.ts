@@ -120,7 +120,11 @@ export function runChunk(
         if (pnlPct > 0) state.wins++; else state.losses++;
         state.totalPnlPct = ((state.balance - INITIAL_BALANCE) / INITIAL_BALANCE) * 100;
 
-        trades.push({ bar: i, direction: t.direction, entry: t.entry, exit: exitPrice, pnlPct: pnlPct * 100, reason });
+        const tRec = { bar: i, direction: t.direction, entry: t.entry, exit: exitPrice, pnlPct: pnlPct * 100, reason };
+        trades.push(tRec);
+        state.trades.push(tRec);
+
+        // trades.push({ bar: i, direction: t.direction, entry: t.entry, exit: exitPrice, pnlPct: pnlPct * 100, reason });
         state.trade = null;
 
         if (state.balance > state.peakBalance) state.peakBalance = state.balance;
