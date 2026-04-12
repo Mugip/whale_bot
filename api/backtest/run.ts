@@ -82,6 +82,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const s = result.state;
       const INITIAL = 10_000;
       const winRate = (s.wins + s.losses) > 0 ? s.wins / (s.wins + s.losses) : 0;
+      const allTrades = s.trades ||
+
 
       // Max drawdown from equity curve
       let maxDD = 0;
