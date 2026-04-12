@@ -1,20 +1,5 @@
-// ─────────────────────────────────────────────────────────────
-// lib/indicators.ts
-// Deterministic technical indicators: RSI, ATR, volume ratio.
-// All functions are pure – input arrays, output numbers.
-// ─────────────────────────────────────────────────────────────
-
 import { OKXCandle } from "./okx";
 
-// ─── RSI ─────────────────────────────────────────────────────
-
-/**
- * Computes RSI values for the entire candle array.
- * @param candles  Oldest-first OHLCV candles
- * @param period   Default 14
- * @returns        Array of RSI values, same length as input
- *                 (first `period` entries are NaN)
- */
 export function computeRSI(candles: OKXCandle[], period: number = 14): number[] {
   const closes = candles.map((c) => c.close);
   const rsi: number[] = new Array(closes.length).fill(NaN);
@@ -24,7 +9,6 @@ export function computeRSI(candles: OKXCandle[], period: number = 14): number[] 
   let avgGain = 0;
   let avgLoss = 0;
 
-  // Seed with first period
   for (let i = 1; i <= period; i++) {
     const diff = closes[i] - closes[i - 1];
     if (diff >= 0) {
@@ -39,7 +23,6 @@ export function computeRSI(candles: OKXCandle[], period: number = 14): number[] 
 
   rsi[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
 
-  // Wilder's smoothing for remaining candles
   for (let i = period + 1; i < closes.length; i++) {
     const diff = closes[i] - closes[i - 1];
     const gain = diff > 0 ? diff : 0;
@@ -54,21 +37,10 @@ export function computeRSI(candles: OKXCandle[], period: number = 14): number[] 
   return rsi;
 }
 
-// ─── RSI Divergence ──────────────────────────────────────────
-
 export interface DivergenceResult {
-  bullish: boolean; // price lower-low, RSI higher-low
-  bearish: boolean; // price higher-high, RSI lower-high
+  bullish: boolean;
+  bearish: boolean;
 }
-
-/**
- * Detects the most recent RSI divergence using the last two
- * pivot lows/highs in the price and RSI series.
- *
- * Uses a simple swing-point definition:
- *   - Swing low: candle whose low is lower than both neighbours
- *   - Swing high: candle whose high is higher than both neighbours
- */
 
 export function detectRSIDivergence(
   candles: OKXCandle[],
@@ -80,7 +52,6 @@ export function detectRSIDivergence(
   const current = candles[candles.length - 1];
   const currentRsi = rsiValues[rsiValues.length - 1];
 
-  // Look at the past 40 candles to find the extreme lows/highs
   const pastCandles = candles.slice(-(LOOKBACK + 1), -1);
   const pastRsi = rsiValues.slice(-(LOOKBACK + 1), -1);
 
@@ -100,32 +71,18 @@ export function detectRSIDivergence(
     }
   }
 
-  // BULLISH DIVERGENCE: Price made a lower low (sweep), but RSI is HIGHER than it was at the previous low.
   const bullish = current.low <= minLow && currentRsi > minLowRsi;
-
-  // BEARISH DIVERGENCE: Price made a higher high (sweep), but RSI is LOWER than it was at the previous high.
   const bearish = current.high >= maxHigh && currentRsi < maxHighRsi;
 
   return { bullish, bearish };
 }
 
-
-// ─── ATR ─────────────────────────────────────────────────────
-
-/**
- * Computes the Average True Range (ATR) using Wilder's smoothing.
- * @param candles  Oldest-first OHLCV candles
- * @param period   Default 14
- * @returns        Most recent ATR value
- */
 export function computeATR(candles: OKXCandle[], period: number = 14): number {
   if (candles.length < period + 1) {
-    // Fallback: simple high-low range of last candle
     const last = candles[candles.length - 1];
     return last.high - last.low;
   }
 
-  // True range for each candle
   const trValues: number[] = [];
   for (let i = 1; i < candles.length; i++) {
     const high = candles[i].high;
@@ -140,10 +97,8 @@ export function computeATR(candles: OKXCandle[], period: number = 14): number {
     trValues.push(tr);
   }
 
-  // Seed ATR with simple average of first `period` TRs
   let atr = trValues.slice(0, period).reduce((a, b) => a + b, 0) / period;
 
-  // Wilder's smoothing for the rest
   for (let i = period; i < trValues.length; i++) {
     atr = (atr * (period - 1) + trValues[i]) / period;
   }
@@ -151,16 +106,6 @@ export function computeATR(candles: OKXCandle[], period: number = 14): number {
   return atr;
 }
 
-// ─── Volume Ratio ────────────────────────────────────────────
-
-/**
- * Computes current-candle volume divided by the average volume
- * of the previous N candles (excluding the current one).
- *
- * @param candles  Oldest-first OHLCV candles
- * @param lookback Number of candles to average (default 20)
- * @returns        Volume ratio (current / avg). Returns 0 if not enough data.
- */
 export function computeVolumeRatio(
   candles: OKXCandle[],
   lookback: number = 20
@@ -178,19 +123,14 @@ export function computeVolumeRatio(
   return current.vol / avgVolume;
 }
 
-/**
- * Computes Exponential Moving Average (EMA)
- */
 export function computeEMA(candles: OKXCandle[], period: number = 200): number {
   if (candles.length < period) return candles[candles.length - 1]?.close || 0;
   
   const k = 2 / (period + 1);
-  // Seed with simple average of first 'period' closes
   let sum = 0;
   for (let i = 0; i < period; i++) sum += candles[i].close;
   let ema = sum / period;
 
-  // Compute EMA for the rest
   for (let i = period; i < candles.length; i++) {
     ema = (candles[i].close - ema) * k + ema;
   }
