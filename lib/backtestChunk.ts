@@ -71,7 +71,7 @@ export function runChunk(
 
       // --- Trailing Stop Logic ---
       const TRAILING_ACTIVATION_PCT = 0.015; // 1.5%
-      const TRAILING_DISTANCE_PCT = 0.005;   // 0.5%
+      const TRAILING_DISTANCE_PCT = 0.01;   // changed from 0.5%
       const trailActPrice = isLong ? t.entry * (1 + TRAILING_ACTIVATION_PCT) : t.entry * (1 - TRAILING_ACTIVATION_PCT);
       
       if (isLong && bar.high >= trailActPrice) {
