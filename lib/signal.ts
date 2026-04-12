@@ -34,7 +34,7 @@ const OB_IMBALANCE_THRESHOLD = 0.15;
  * Change to 1! In backtests, Whale and OB data are missing (0),
  * so RSI is the ONLY confirmation available. 
  */
-const MIN_CONFIRMATIONS = 0;
+const MIN_CONFIRMATIONS = 1;
 
 export interface SignalResult {
   triggered: boolean;
