@@ -1,5 +1,5 @@
 import { ChunkState } from "./backtestRedis";
-import { computeRSI, computeATR, computeEMA } from "./indicators";
+import { computeRSI, computeATR, computeEMA, computeVolumeRatio } from "./indicators";
 import { calculateRisk, TP1_CLOSE_FRACTION } from "./risk";
 import { evaluateSignal } from "./signal";
 import { FeatureSet } from "../state/schema";
@@ -18,10 +18,10 @@ export function runChunk(
   
   const state: ChunkState = incomingState ?? {
     nextIndex: startIndex, balance: INITIAL_BALANCE, peakBalance: INITIAL_BALANCE, 
-    wins: 0, losses: 0, totalPnlPct: 0, equityCurve:[INITIAL_BALANCE], trade: null, trades: []
+    wins: 0, losses: 0, totalPnlPct: 0, equityCurve:[INITIAL_BALANCE], trade: null, trades:[]
   };
 
-  const trades: any[] = [];
+  const trades: any[] =[];
   const end = Math.min(startIndex + chunkSize, bars.length);
 
   for (let i = startIndex; i < end; i++) {
@@ -45,7 +45,9 @@ export function runChunk(
         
         t.size *= (1 - TP1_CLOSE_FRACTION);
         t.notional *= (1 - TP1_CLOSE_FRACTION);
-        // WE NO LONGER MOVE STOP TO BREAKEVEN. LET IT BREATHE.
+        
+        // SMART BREAKEVEN: Move stop to entry *only* after we secured 2.0 ATRs in profit
+        t.stop = t.entry;
       }
 
       let closed = false;
@@ -53,7 +55,7 @@ export function runChunk(
       let reason = "sl";
 
       if (slHit) {
-        exitPrice = t.stop; reason = "sl"; closed = true;
+        exitPrice = t.stop; reason = t.tp1Hit ? "be/trail" : "sl"; closed = true;
       } else if (t.tp1Hit && tp2Hit) {
         exitPrice = t.tp2; reason = "tp2"; closed = true;
       }
@@ -87,24 +89,26 @@ export function runChunk(
 
     const slice = bars.slice(Math.max(0, i - 200), i + 1);
     
-    const rsiValues = computeRSI(slice as any, 14);
-    const atr       = computeATR(slice as any, 14);
-    const ema200    = computeEMA(slice as any, 200);
-    const ema50     = computeEMA(slice as any, 50);
+    const rsiValues   = computeRSI(slice as any, 14);
+    const atr         = computeATR(slice as any, 14);
+    const ema200      = computeEMA(slice as any, 200);
+    const ema50       = computeEMA(slice as any, 50);
+    const volumeRatio = computeVolumeRatio(slice as any, 20); // Computed here
     
     const currentRsi = rsiValues[rsiValues.length - 1];
     const prevRsi    = rsiValues[rsiValues.length - 2];
 
     const features: FeatureSet = {
       currentPrice: bar.close,
-      ema200, ema50, currentRsi, prevRsi, atr,
+      ema200, ema50, currentRsi, prevRsi, atr, volumeRatio,
       isGreen: bar.close > bar.open, isRed: bar.close < bar.open
     };
 
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
 
-    const baseStop = signal.direction === "long" ? bar.close - (atr * 1.5) : bar.close + (atr * 1.5);
+    // Base stop widened to 2.0 ATR
+    const baseStop = signal.direction === "long" ? bar.close - (atr * 2.0) : bar.close + (atr * 2.0);
     const risk = calculateRisk(signal.direction, bar.close, baseStop, atr, state.balance);
 
     state.trade = {
@@ -117,4 +121,4 @@ export function runChunk(
 
   state.nextIndex = end;
   return { state, trades, nextIndex: end, done: end >= bars.length };
-}
+                             }
