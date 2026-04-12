@@ -23,7 +23,7 @@ import { logger } from "../utils/logger";
 // ─── Thresholds ──────────────────────────────────────────────
 
 const WHALE_SCORE_THRESHOLD = 0.4;
-const VOLUME_RATIO_THRESHOLD = 1.3;
+const VOLUME_RATIO_THRESHOLD = 1.2; // Dropped from 1.3. Current volume must be 20% above average
 const OB_IMBALANCE_THRESHOLD = 0.15;
 
 /**
@@ -34,7 +34,7 @@ const OB_IMBALANCE_THRESHOLD = 0.15;
  * Change to 1! In backtests, Whale and OB data are missing (0),
  * so RSI is the ONLY confirmation available. 
  */
-const MIN_CONFIRMATIONS = 1;
+const MIN_CONFIRMATIONS = 0;
 
 export interface SignalResult {
   triggered: boolean;
