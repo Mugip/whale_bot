@@ -48,8 +48,7 @@ import { FeatureSet, SignalSnapshot } from "../../state/schema";
 
 function validateEnv(): string[] {
   const required = [
-    "UPSTASH_REDIS_REST_URL",
-    "UPSTASH_REDIS_REST_TOKEN",
+    "REDIS_URL",
     "OKX_BASE_URL",
     "CRON_SECRET",
     // ETHERSCAN_API_KEY is intentionally NOT required here –
