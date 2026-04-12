@@ -1,4 +1,4 @@
-import { computeRSI, computeATR, computeEMA } from "./indicators";
+import { computeRSI, computeATR, computeEMA, computeVolumeRatio } from "./indicators";
 import { calculateRisk, TP1_CLOSE_FRACTION } from "./risk";
 import { evaluateSignal } from "./signal";
 import { OKXCandle } from "./okx";
@@ -6,7 +6,7 @@ import { FeatureSet, TradeDirection } from "../state/schema";
 
 export interface BacktestTrade {
   openBar: number; closeBar: number; direction: TradeDirection; entryPrice: number; exitPrice: number;
-  stopLoss: number; takeProfitOne: number; takeProfitTwo: number; pnlPct: number; closeReason: "tp1" | "tp2" | "sl" | "end_of_data";
+  stopLoss: number; takeProfitOne: number; takeProfitTwo: number; pnlPct: number; closeReason: "tp1" | "tp2" | "sl" | "end_of_data" | "be/trail";
 }
 
 export interface BacktestResult {
@@ -17,7 +17,7 @@ export interface BacktestResult {
 export function runBacktest(
   candles15m: OKXCandle[], candles1h: OKXCandle[], initialBalance = 10_000, warmupBars = 200 
 ): BacktestResult {
-  const trades: BacktestTrade[] = [];
+  const trades: BacktestTrade[] =[];
   let balance = initialBalance;
   let peakBalance = initialBalance;
   let maxDrawdownPct = 0;
@@ -53,14 +53,16 @@ export function runBacktest(
         balance += openTrade.notional * TP1_CLOSE_FRACTION * partialPnl;
         openTrade.size *= 1 - TP1_CLOSE_FRACTION;
         openTrade.notional *= 1 - TP1_CLOSE_FRACTION;
-        // NO BREAKEVEN MOVEMENT
+        
+        // SMART BREAKEVEN: Move stop to entry
+        openTrade.stopLoss = openTrade.entryPrice;
       }
 
       let closed = false;
       let exitPrice = close;
       let reason: BacktestTrade["closeReason"] = "sl";
 
-      if (slHit) { exitPrice = openTrade.stopLoss; reason = "sl"; closed = true; } 
+      if (slHit) { exitPrice = openTrade.stopLoss; reason = openTrade.tp1Hit ? "be/trail" : "sl"; closed = true; } 
       else if (openTrade.tp1Hit && tp2Hit) { exitPrice = openTrade.takeProfitTwo; reason = "tp2"; closed = true; }
 
       if (closed) {
@@ -87,23 +89,25 @@ export function runBacktest(
     if (slice1h.length < 200) continue; 
     if (i - lastTradeBar < 4) continue; 
 
-    const rsiValues = computeRSI(slice15m, 14); 
-    const atr = computeATR(slice1h, 14);        
-    const ema200 = computeEMA(slice1h, 200);    
-    const ema50 = computeEMA(slice1h, 50);      
+    const rsiValues   = computeRSI(slice15m, 14); 
+    const volumeRatio = computeVolumeRatio(slice15m, 20); // Added volume here
+    const atr         = computeATR(slice1h, 14);        
+    const ema200      = computeEMA(slice1h, 200);    
+    const ema50       = computeEMA(slice1h, 50);      
 
     const currentRsi = rsiValues[rsiValues.length - 1];
     const prevRsi = rsiValues[rsiValues.length - 2];
 
     const features: FeatureSet = {
-      currentPrice: bar.close, ema200, ema50, currentRsi, prevRsi, atr,
+      currentPrice: bar.close, ema200, ema50, currentRsi, prevRsi, atr, volumeRatio,
       isGreen: bar.close > bar.open, isRed: bar.close < bar.open
     };
 
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
 
-    const baseStop = signal.direction === "long" ? bar.close - (atr * 1.5) : bar.close + (atr * 1.5);
+    // 2.0 ATR STOP
+    const baseStop = signal.direction === "long" ? bar.close - (atr * 2.0) : bar.close + (atr * 2.0);
     const risk = calculateRisk(signal.direction, bar.close, baseStop, atr, balance);
 
     openTrade = {
