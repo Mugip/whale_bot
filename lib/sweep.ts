@@ -1,22 +1,14 @@
 import { OKXCandle } from "./okx";
 
-const BREAK_THRESHOLD = 0.001; // 0.1% break required
-const LOOKBACK = 40; // Increased to 40 candles (10 hours) for major levels
+const BREAK_THRESHOLD = 0.001; 
+const LOOKBACK = 40; 
 
 export interface SweepResult {
-  bullishSweep: boolean;
-  bearishSweep: boolean;
-  sweepLow: number;
-  sweepHigh: number;
+  bullishSweep: boolean; bearishSweep: boolean; sweepLow: number; sweepHigh: number;
 }
 
 export function detectLiquiditySweep(candles: OKXCandle[]): SweepResult {
-  const result: SweepResult = {
-    bullishSweep: false,
-    bearishSweep: false,
-    sweepLow: 0,
-    sweepHigh: 0,
-  };
+  const result: SweepResult = { bullishSweep: false, bearishSweep: false, sweepLow: 0, sweepHigh: 0 };
 
   if (candles.length < LOOKBACK + 1) return result;
 
@@ -26,22 +18,19 @@ export function detectLiquiditySweep(candles: OKXCandle[]): SweepResult {
   const prevLow = Math.min(...lookbackCandles.map((c) => c.low));
   const prevHigh = Math.max(...lookbackCandles.map((c) => c.high));
 
-  // Calculate wick sizes relative to the whole candle
   const candleRange = current.high - current.low;
   const lowerWick = Math.min(current.open, current.close) - current.low;
   const upperWick = current.high - Math.max(current.open, current.close);
 
-  // ─── Bullish sweep ───────────────────────────────────────
   const requiredBullBreak = prevLow * (1 - BREAK_THRESHOLD);
-  // Break low, close above OPEN (green candle) AND above prevLow, wick > 40%
+  // Rejection logic: Must close > open (green candle)
   if (current.low <= requiredBullBreak && current.close > prevLow && current.close > current.open && candleRange > 0 && (lowerWick / candleRange) > 0.4) {
     result.bullishSweep = true;
     result.sweepLow = prevLow;
   }
 
-  // ─── Bearish sweep ───────────────────────────────────────
   const requiredBearBreak = prevHigh * (1 + BREAK_THRESHOLD);
-  // Break high, close below OPEN (red candle) AND below prevHigh, wick > 40%
+  // Rejection logic: Must close < open (red candle)
   if (current.high >= requiredBearBreak && current.close < prevHigh && current.close < current.open && candleRange > 0 && (upperWick / candleRange) > 0.4) {
     result.bearishSweep = true;
     result.sweepHigh = prevHigh;
