@@ -13,7 +13,7 @@
 
 import { TradeDirection } from "../state/schema";
 
-const STOP_BUFFER_PCT =  0.002;         // Base buffer, but overridden by ATR below    
+const STOP_BUFFER_PCT =  0.004;         // Base buffer, but overridden by ATR below    
 const TRAILING_ACTIVATION_PCT = 0.015; // activate trailing at +4 % // Activate trailing at +1.5% profit (was 4%)
 const TRAILING_DISTANCE_PCT = 0.01;    // Trail by 1.0% (Widened so we don't get shaken out)
 
@@ -24,8 +24,8 @@ const ENTRY_FEE_PCT = 0.001;  // 0.1 % effective entry slippage+fee
 const EXIT_FEE_PCT  = 0.001;  // 0.1 % effective exit slippage+fee
 
 // ─── ATR TP multipliers ──────────────────────────────────────
-const ATR_TP1_MULT = 1.5;
-const ATR_TP2_MULT = 3.0; 
+const ATR_TP1_MULT = 2.0;
+const ATR_TP2_MULT = 4.0; 
 
 export interface RiskCalculation {
   positionSizeUsd: number;
