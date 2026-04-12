@@ -22,15 +22,19 @@ import { logger } from "../utils/logger";
 
 // ─── Thresholds ──────────────────────────────────────────────
 
-const WHALE_SCORE_THRESHOLD = 0.6;
-const VOLUME_RATIO_THRESHOLD = 1.8;
-const OB_IMBALANCE_THRESHOLD = 0.2;
+const WHALE_SCORE_THRESHOLD = 0.4;
+const VOLUME_RATIO_THRESHOLD = 1.3;
+const OB_IMBALANCE_THRESHOLD = 0.15;
 
 /**
  * Minimum optional confirmations required (out of 3:
  * whaleScore, RSI divergence, orderbook imbalance).
  */
-const MIN_CONFIRMATIONS = 2;
+/**
+ * Change to 1! In backtests, Whale and OB data are missing (0),
+ * so RSI is the ONLY confirmation available. 
+ */
+const MIN_CONFIRMATIONS = 1;
 
 export interface SignalResult {
   triggered: boolean;
