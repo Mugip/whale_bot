@@ -1,61 +1,37 @@
 import { FeatureSet, TradeDirection } from "../state/schema";
-import { isWithinTradingHours } from "../utils/time";
-
-const WHALE_SCORE_THRESHOLD = 0.4;
-const VOLUME_RATIO_THRESHOLD = 1.2;
-const OB_IMBALANCE_THRESHOLD = 0.15;
-const MIN_CONFIRMATIONS = 1;
 
 export interface SignalResult {
-  triggered: boolean; direction: TradeDirection | null; reasons: string[]; confirmations?: number;
-}
-
-function checkLongCore(features: FeatureSet, withinHours: boolean): { pass: boolean; failures: string[] } {
-  const failures: string[] = [];
-  if (!features.sweepConfirmed) failures.push("bullish sweep not confirmed");
-  if (features.volumeRatio < VOLUME_RATIO_THRESHOLD) failures.push("volume too low");
-  if (features.currentPrice < features.ema200) failures.push("Price below 200 EMA (Downtrend)");
-  return { pass: failures.length === 0, failures };
-}
-
-function checkShortCore(features: FeatureSet, withinHours: boolean): { pass: boolean; failures: string[] } {
-  const failures: string[] = [];
-  if (!features.sweepConfirmed) failures.push("bearish sweep not confirmed");
-  if (features.volumeRatio < VOLUME_RATIO_THRESHOLD) failures.push("volume too low");
-  if (features.currentPrice > features.ema200) failures.push("Price above 200 EMA (Uptrend)");
-  return { pass: failures.length === 0, failures };
-}
-
-function countLongConfirmations(features: FeatureSet): { count: number; details: string[] } {
-  const details: string[] = []; let count = 0;
-  if (features.whaleScore >= WHALE_SCORE_THRESHOLD) { count++; details.push("whaleScore ✓"); }
-  if (features.rsiDirection === "bullish") { count++; details.push("RSI bullish divergence ✓"); }
-  if (features.obImbalance >= OB_IMBALANCE_THRESHOLD) { count++; details.push("obImbalance ✓"); }
-  return { count, details };
-}
-
-function countShortConfirmations(features: FeatureSet): { count: number; details: string[] } {
-  const details: string[] = []; let count = 0;
-  if (features.whaleScore <= -WHALE_SCORE_THRESHOLD) { count++; details.push("whaleScore ✓"); }
-  if (features.rsiDirection === "bearish") { count++; details.push("RSI bearish divergence ✓"); }
-  if (features.obImbalance <= -OB_IMBALANCE_THRESHOLD) { count++; details.push("obImbalance ✓"); }
-  return { count, details };
+  triggered: boolean;
+  direction: TradeDirection | null;
+  reasons: string[];
 }
 
 export function evaluateSignal(features: FeatureSet): SignalResult {
-  const withinHours = isWithinTradingHours();
+  const { currentPrice, ema50, ema200, currentRsi, prevRsi, isGreen, isRed } = features;
+  const reasons: string[] = [];
 
-  const longCore = checkLongCore(features, withinHours);
-  if (longCore.pass) {
-    const { count, details } = countLongConfirmations(features);
-    if (count >= MIN_CONFIRMATIONS) return { triggered: true, direction: "long", reasons: [], confirmations: count };
+  // ─── LONG CONDITION: Trend + Oversold Pullback + Bullish Resumption ───
+  const isUptrend = ema50 > ema200 && currentPrice > ema200;
+  const isOversoldPullback = prevRsi < 40; // RSI dipped indicating a pullback
+  const isTurningUp = currentRsi > prevRsi && isGreen; // Momentum returning
+
+  if (isUptrend && isOversoldPullback && isTurningUp) {
+    return { triggered: true, direction: "long", reasons: ["Trend Pullback Long"] };
   }
 
-  const shortCore = checkShortCore(features, withinHours);
-  if (shortCore.pass) {
-    const { count, details } = countShortConfirmations(features);
-    if (count >= MIN_CONFIRMATIONS) return { triggered: true, direction: "short", reasons: [], confirmations: count };
+  // ─── SHORT CONDITION: Downtrend + Overbought Pullback + Bearish Resumption ───
+  const isDowntrend = ema50 < ema200 && currentPrice < ema200;
+  const isOverboughtPullback = prevRsi > 60; // RSI spiked indicating a relief rally
+  const isTurningDown = currentRsi < prevRsi && isRed; // Momentum returning down
+
+  if (isDowntrend && isOverboughtPullback && isTurningDown) {
+    return { triggered: true, direction: "short", reasons: ["Trend Pullback Short"] };
   }
 
-  return { triggered: false, direction: null, reasons: [...longCore.failures, ...shortCore.failures] };
+  // Debugging info (optional)
+  if (!isUptrend && !isDowntrend) reasons.push("No clear trend (EMA 50/200 conflict)");
+  if (isUptrend && !isOversoldPullback) reasons.push("Waiting for RSI < 40 pullback");
+  if (isDowntrend && !isOverboughtPullback) reasons.push("Waiting for RSI > 60 pullback");
+
+  return { triggered: false, direction: null, reasons };
 }
