@@ -69,69 +69,46 @@ export interface DivergenceResult {
  *   - Swing low: candle whose low is lower than both neighbours
  *   - Swing high: candle whose high is higher than both neighbours
  */
+
 export function detectRSIDivergence(
   candles: OKXCandle[],
   rsiValues: number[]
 ): DivergenceResult {
-  const n = candles.length;
+  const LOOKBACK = 40;
+  if (candles.length < LOOKBACK + 1) return { bullish: false, bearish: false };
 
-  // Find the two most recent swing lows (for bullish divergence)
-  const swingLows: number[] = [];
-  for (let i = 1; i < n - 1; i++) {
-    if (
-      candles[i].low < candles[i - 1].low &&
-      candles[i].low < candles[i + 1].low
-    ) {
-      swingLows.push(i);
+  const current = candles[candles.length - 1];
+  const currentRsi = rsiValues[rsiValues.length - 1];
+
+  // Look at the past 40 candles to find the extreme lows/highs
+  const pastCandles = candles.slice(-(LOOKBACK + 1), -1);
+  const pastRsi = rsiValues.slice(-(LOOKBACK + 1), -1);
+
+  let minLow = Infinity;
+  let minLowRsi = 100;
+  let maxHigh = -Infinity;
+  let maxHighRsi = 0;
+
+  for (let i = 0; i < pastCandles.length; i++) {
+    if (pastCandles[i].low < minLow) {
+      minLow = pastCandles[i].low;
+      minLowRsi = pastRsi[i];
+    }
+    if (pastCandles[i].high > maxHigh) {
+      maxHigh = pastCandles[i].high;
+      maxHighRsi = pastRsi[i];
     }
   }
 
-  // Find the two most recent swing highs (for bearish divergence)
-  const swingHighs: number[] = [];
-  for (let i = 1; i < n - 1; i++) {
-    if (
-      candles[i].high > candles[i - 1].high &&
-      candles[i].high > candles[i + 1].high
-    ) {
-      swingHighs.push(i);
-    }
-  }
+  // BULLISH DIVERGENCE: Price made a lower low (sweep), but RSI is HIGHER than it was at the previous low.
+  const bullish = current.low <= minLow && currentRsi > minLowRsi;
 
-  let bullish = false;
-  let bearish = false;
-
-  // Bullish: last two swing lows — price makes lower-low, RSI makes higher-low
-  if (swingLows.length >= 2) {
-    const prevLowIdx = swingLows[swingLows.length - 2];
-    const currLowIdx = swingLows[swingLows.length - 1];
-
-    const priceLowerLow =
-      candles[currLowIdx].low < candles[prevLowIdx].low;
-    const rsiHigherLow =
-      !isNaN(rsiValues[currLowIdx]) &&
-      !isNaN(rsiValues[prevLowIdx]) &&
-      rsiValues[currLowIdx] > rsiValues[prevLowIdx];
-
-    bullish = priceLowerLow && rsiHigherLow;
-  }
-
-  // Bearish: last two swing highs — price makes higher-high, RSI makes lower-high
-  if (swingHighs.length >= 2) {
-    const prevHighIdx = swingHighs[swingHighs.length - 2];
-    const currHighIdx = swingHighs[swingHighs.length - 1];
-
-    const priceHigherHigh =
-      candles[currHighIdx].high > candles[prevHighIdx].high;
-    const rsiLowerHigh =
-      !isNaN(rsiValues[currHighIdx]) &&
-      !isNaN(rsiValues[prevHighIdx]) &&
-      rsiValues[currHighIdx] < rsiValues[prevHighIdx];
-
-    bearish = priceHigherHigh && rsiLowerHigh;
-  }
+  // BEARISH DIVERGENCE: Price made a higher high (sweep), but RSI is LOWER than it was at the previous high.
+  const bearish = current.high >= maxHigh && currentRsi < maxHighRsi;
 
   return { bullish, bearish };
 }
+
 
 // ─── ATR ─────────────────────────────────────────────────────
 
