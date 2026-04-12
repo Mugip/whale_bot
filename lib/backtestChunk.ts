@@ -45,7 +45,7 @@ export function runChunk(
         
         t.size *= (1 - TP1_CLOSE_FRACTION);
         t.notional *= (1 - TP1_CLOSE_FRACTION);
-        t.stop = t.entry; // Move stop to Breakeven
+        // WE NO LONGER MOVE STOP TO BREAKEVEN. LET IT BREATHE.
       }
 
       let closed = false;
@@ -53,7 +53,7 @@ export function runChunk(
       let reason = "sl";
 
       if (slHit) {
-        exitPrice = t.stop; reason = t.tp1Hit ? "be/trail" : "sl"; closed = true;
+        exitPrice = t.stop; reason = "sl"; closed = true;
       } else if (t.tp1Hit && tp2Hit) {
         exitPrice = t.tp2; reason = "tp2"; closed = true;
       }
@@ -83,11 +83,10 @@ export function runChunk(
 
     const lastTradeBar = state.trades.length > 0 ? state.trades[state.trades.length - 1].bar : -999;
     if (i < 200) continue; 
-    if (i - lastTradeBar < 4) continue; // Shorter 1-hour cooldown for high-freq strategy
+    if (i - lastTradeBar < 4) continue; 
 
     const slice = bars.slice(Math.max(0, i - 200), i + 1);
     
-    // Calculate Indicators
     const rsiValues = computeRSI(slice as any, 14);
     const atr       = computeATR(slice as any, 14);
     const ema200    = computeEMA(slice as any, 200);
@@ -98,19 +97,13 @@ export function runChunk(
 
     const features: FeatureSet = {
       currentPrice: bar.close,
-      ema200,
-      ema50,
-      currentRsi,
-      prevRsi,
-      atr,
-      isGreen: bar.close > bar.open,
-      isRed: bar.close < bar.open
+      ema200, ema50, currentRsi, prevRsi, atr,
+      isGreen: bar.close > bar.open, isRed: bar.close < bar.open
     };
 
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
 
-    // We no longer have "sweep extremes", so we set the initial stop loss based purely on ATR
     const baseStop = signal.direction === "long" ? bar.close - (atr * 1.5) : bar.close + (atr * 1.5);
     const risk = calculateRisk(signal.direction, bar.close, baseStop, atr, state.balance);
 
@@ -124,4 +117,4 @@ export function runChunk(
 
   state.nextIndex = end;
   return { state, trades, nextIndex: end, done: end >= bars.length };
-          }
+}
