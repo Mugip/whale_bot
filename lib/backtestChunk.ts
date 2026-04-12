@@ -1,8 +1,5 @@
 // ─────────────────────────────────────────────────────────────
 // lib/backtestChunk.ts
-// Chunked backtesting engine wired to the real signal pipeline.
-// Each call processes at most chunkSize bars and returns state
-// for the next chunk – this keeps Vercel under the 60s timeout.
 // ─────────────────────────────────────────────────────────────
 
 import { ChunkState } from "./backtestRedis";
@@ -13,53 +10,23 @@ import { evaluateSignal } from "./signal";
 import { FeatureSet } from "../state/schema";
 
 export interface OHLCVBar {
-  timestamp: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  vol: number;
+  timestamp: number; open: number; high: number; low: number; close: number; vol: number;
 }
-
-interface TradeRecord {
-  bar: number;
-  direction: "long" | "short";
-  entry: number;
-  exit: number;
-  pnlPct: number;
-  reason: string;
-}
-
-export interface ChunkResult {
-  state: ChunkState;
-  trades: TradeRecord[];
-  nextIndex: number;
-  done: boolean;
-}
-
-const INITIAL_BALANCE = 10_000;
-const EQUITY_SAMPLE_EVERY = 50; // record equity every N bars
 
 export function runChunk(
   bars: OHLCVBar[],
   startIndex: number,
   chunkSize: number,
   incomingState: ChunkState | null
-): ChunkResult {
-  // ── Restore or initialise state ──────────────────────────
+): any {
+  const INITIAL_BALANCE = 10_000;
+  
   const state: ChunkState = incomingState ?? {
-    nextIndex: startIndex,
-    balance: INITIAL_BALANCE,
-    peakBalance: INITIAL_BALANCE,
-    wins: 0,
-    losses: 0,
-    totalPnlPct: 0,
-    equityCurve: [INITIAL_BALANCE],
-    trade: null,
-    trades:[], // <--- ADD THIS LINE
+    nextIndex: startIndex, balance: INITIAL_BALANCE, peakBalance: INITIAL_BALANCE, 
+    wins: 0, losses: 0, totalPnlPct: 0, equityCurve:[INITIAL_BALANCE], trade: null, trades: []
   };
 
-  const trades: TradeRecord[] = [];
+  const trades: any[] =[];
   const end = Math.min(startIndex + chunkSize, bars.length);
 
   for (let i = startIndex; i < end; i++) {
@@ -70,19 +37,15 @@ export function runChunk(
       const t = state.trade;
       const isLong = t.direction === "long";
 
-      // --- Trailing Stop Logic ---
-      const TRAILING_ACTIVATION_PCT = 0.015; // 1.5%
-      const TRAILING_DISTANCE_PCT = 0.01;   // changed from 0.5%
-      const trailActPrice = isLong ? t.entry * (1 + TRAILING_ACTIVATION_PCT) : t.entry * (1 - TRAILING_ACTIVATION_PCT);
-      
+      // Calculate trailing activation (disabled/widened mostly, relies on TP1/TP2)
+      const trailActPrice = isLong ? t.entry * (1 + 0.05) : t.entry * (1 - 0.05);
       if (isLong && bar.high >= trailActPrice) {
-          const newStop = bar.close * (1 - TRAILING_DISTANCE_PCT);
+          const newStop = bar.close * (1 - 0.02);
           if (newStop > t.stop) t.stop = newStop;
       } else if (!isLong && bar.low <= trailActPrice) {
-          const newStop = bar.close * (1 + TRAILING_DISTANCE_PCT);
+          const newStop = bar.close * (1 + 0.02);
           if (newStop < t.stop) t.stop = newStop;
       }
-      // ---------------------------
 
       const slHit  = isLong ? bar.low  <= t.stop : bar.high >= t.stop;
       const tp1Hit = isLong ? bar.high >= t.tp1  : bar.low  <= t.tp1;
@@ -91,14 +54,15 @@ export function runChunk(
       // Partial close at TP1
       if (!t.tp1Hit && tp1Hit) {
         t.tp1Hit = true;
-        const partialPnl = isLong
-          ? (t.tp1 - t.entry) / t.entry
-          : (t.entry - t.tp1) / t.entry;
-        state.balance += t.notional * TP1_CLOSE_FRACTION * partialPnl;
-        t.size     *= (1 - TP1_CLOSE_FRACTION);
+        const partialPnlPct = isLong ? (t.tp1 - t.entry) / t.entry : (t.entry - t.tp1) / t.entry;
+        const profitSecured = t.notional * TP1_CLOSE_FRACTION * partialPnlPct;
+        
+        state.balance += profitSecured;
+        t.realizedUsd = (t.realizedUsd || 0) + profitSecured; // Track secured profit
+        
+        t.size *= (1 - TP1_CLOSE_FRACTION);
         t.notional *= (1 - TP1_CLOSE_FRACTION);
-        // Move stop to break-even (or keep trailing if higher)
-        t.stop = isLong ? Math.max(t.stop, t.entry) : Math.min(t.stop, t.entry);
+        t.stop = isLong ? Math.max(t.stop, t.entry) : Math.min(t.stop, t.entry); // Move to Break-Even
       }
 
       let closed = false;
@@ -106,46 +70,39 @@ export function runChunk(
       let reason = "sl";
 
       if (slHit) {
-        exitPrice = t.stop; reason = "sl/trail"; closed = true;
+        exitPrice = t.stop; reason = t.tp1Hit ? "be/trail" : "sl"; closed = true;
       } else if (t.tp1Hit && tp2Hit) {
         exitPrice = t.tp2; reason = "tp2"; closed = true;
       }
 
       if (closed) {
-        const pnlPct = isLong
-          ? (exitPrice - t.entry) / t.entry
-          : (t.entry - exitPrice) / t.entry;
+        const finalPnlPct = isLong ? (exitPrice - t.entry) / t.entry : (t.entry - exitPrice) / t.entry;
+        const finalProfit = t.notional * finalPnlPct;
+        
+        state.balance += finalProfit;
+        t.realizedUsd = (t.realizedUsd || 0) + finalProfit;
 
-        state.balance += t.notional * pnlPct;
-        if (pnlPct > 0) state.wins++; else state.losses++;
+        // Calculate blended PnL % based on ORIGINAL full position size
+        const blendedPnlPct = (t.realizedUsd / t.originalNotional) * 100;
+        
+        if (blendedPnlPct > 0) state.wins++; else state.losses++;
         state.totalPnlPct = ((state.balance - INITIAL_BALANCE) / INITIAL_BALANCE) * 100;
 
-        const tRec = { bar: i, direction: t.direction, entry: t.entry, exit: exitPrice, pnlPct: pnlPct * 100, reason };
+        const tRec = { bar: i, direction: t.direction, entry: t.entry, exit: exitPrice, pnlPct: blendedPnlPct, reason };
         trades.push(tRec);
         state.trades.push(tRec);
-
-        // trades.push({ bar: i, direction: t.direction, entry: t.entry, exit: exitPrice, pnlPct: pnlPct * 100, reason });
         state.trade = null;
 
         if (state.balance > state.peakBalance) state.peakBalance = state.balance;
       }
     }
 
-    
+    if (i % 50 === 0) state.equityCurve.push(parseFloat(state.balance.toFixed(2)));
 
-    // Sample equity curve
-    if (i % EQUITY_SAMPLE_EVERY === 0) {
-      state.equityCurve.push(parseFloat(state.balance.toFixed(2)));
-    }
-
-    // ── Look for new entry (only if no open trade) ────────
     if (state.trade) continue;
-
-    // Need at least 50 bars of history for indicators
     if (i < 50) continue;
 
     const slice = bars.slice(Math.max(0, i - 60), i + 1);
-
     const rsiValues   = computeRSI(slice as any, 14);
     const rsiDiv      = detectRSIDivergence(slice as any, rsiValues);
     const sweepResult = detectLiquiditySweep(slice as any);
@@ -153,47 +110,26 @@ export function runChunk(
     const atr         = computeATR(slice as any, 14);
 
     const features: FeatureSet = {
-      whaleScore:    0,        // not available in backtest
-      sweepConfirmed: sweepResult.bullishSweep || sweepResult.bearishSweep,
-      volumeRatio,
-      rsiDivergent:  rsiDiv.bullish || rsiDiv.bearish,
-      rsiDirection:  rsiDiv.bullish ? "bullish" : rsiDiv.bearish ? "bearish" : "none",
-      obImbalance:   0,        // not available in backtest
-      currentPrice:  bar.close,
-      sweepLow:      sweepResult.sweepLow,
-      sweepHigh:     sweepResult.sweepHigh,
-      atr,
+      whaleScore: 0, sweepConfirmed: sweepResult.bullishSweep || sweepResult.bearishSweep,
+      volumeRatio, rsiDivergent: rsiDiv.bullish || rsiDiv.bearish,
+      rsiDirection: rsiDiv.bullish ? "bullish" : rsiDiv.bearish ? "bearish" : "none",
+      obImbalance: 0, currentPrice: bar.close, sweepLow: sweepResult.sweepLow, sweepHigh: sweepResult.sweepHigh, atr,
     };
 
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
 
-    const sweepExtreme = signal.direction === "long"
-      ? sweepResult.sweepLow
-      : sweepResult.sweepHigh;
-
-    const risk = calculateRisk(
-      signal.direction, bar.close, sweepExtreme, atr, state.balance
-    );
+    const sweepExtreme = signal.direction === "long" ? sweepResult.sweepLow : sweepResult.sweepHigh;
+    const risk = calculateRisk(signal.direction, bar.close, sweepExtreme, atr, state.balance);
 
     state.trade = {
-      direction: signal.direction,
-      entry:     bar.close,
-      stop:      risk.stopLoss,
-      tp1:       risk.takeProfitOne,
-      tp2:       risk.takeProfitTwo,
-      tp1Hit:    false,
-      size:      risk.positionSizeUsd / bar.close,
-      notional:  risk.positionSizeUsd,
+      direction: signal.direction, entry: bar.close, stop: risk.stopLoss,
+      tp1: risk.takeProfitOne, tp2: risk.takeProfitTwo, tp1Hit: false,
+      size: risk.positionSizeUsd / bar.close, notional: risk.positionSizeUsd,
+      originalNotional: risk.positionSizeUsd, realizedUsd: 0
     };
   }
 
   state.nextIndex = end;
-
-  return {
-    state,
-    trades,
-    nextIndex: end,
-    done: end >= bars.length,
-  };
+  return { state, trades, nextIndex: end, done: end >= bars.length };
 }
