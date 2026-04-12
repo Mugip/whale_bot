@@ -50,19 +50,21 @@ export function detectLiquiditySweep(candles: OKXCandle[]): SweepResult {
   const prevHigh = Math.max(...lookbackCandles.map((c) => c.high));
 
   // ─── Bullish sweep ───────────────────────────────────────
-  // Current low broke below prevLow by at least 0.2%
+  // Current low broke below prevLow by at least 0.1%
   // AND current close is back above prevLow
+  // AND the candle closed GREEN (current.close > current.open)
   const requiredBullBreak = prevLow * (1 - BREAK_THRESHOLD);
-  if (current.low <= requiredBullBreak && current.close > prevLow) {
+  if (current.low <= requiredBullBreak && current.close > prevLow && current.close > current.open) {
     result.bullishSweep = true;
     result.sweepLow = prevLow;
   }
 
   // ─── Bearish sweep ───────────────────────────────────────
-  // Current high broke above prevHigh by at least 0.2%
+  // Current high broke above prevHigh by at least 0.1%
   // AND current close is back below prevHigh
+  // AND the candle closed RED (current.close < current.open)
   const requiredBearBreak = prevHigh * (1 + BREAK_THRESHOLD);
-  if (current.high >= requiredBearBreak && current.close < prevHigh) {
+  if (current.high >= requiredBearBreak && current.close < prevHigh && current.close < current.open) {
     result.bearishSweep = true;
     result.sweepHigh = prevHigh;
   }
