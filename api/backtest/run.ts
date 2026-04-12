@@ -7,7 +7,6 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { randomUUID } from "crypto";
 import {
   createSession,
   getSession,
@@ -21,7 +20,7 @@ import {
 import { runChunk } from "../../lib/backtestChunk";
 import { logger } from "../../utils/logger";
 
-// Simple ID generator (no uuid dep needed)
+// Simple ID generator
 function genId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -29,8 +28,10 @@ function genId(): string {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
-  const auth = req.headers["x-cron-secret"] ?? req.headers["authorization"];
-  if (auth !== process.env.CRON_SECRET) return res.status(401).json({ error: "Unauthorized" });
+  const auth = req.headers["x-cron-secret"];
+  if (auth !== process.env.CRON_SECRET && req.headers["authorization"] !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
   try {
     const {
@@ -82,8 +83,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const s = result.state;
       const INITIAL = 10_000;
       const winRate = (s.wins + s.losses) > 0 ? s.wins / (s.wins + s.losses) : 0;
-      const allTrades = s.trades ||
-
+      
+      // Grab accumulated trades safely
+      let allTrades = result.trades;
+      if (s.trades) {
+        allTrades = s.trades;
+      }
 
       // Max drawdown from equity curve
       let maxDD = 0;
@@ -95,12 +100,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Gross profit / loss for profit factor
-      const grossProfit = result.trades.filter(t => t.pnlPct > 0).reduce((a, t) => a + t.pnlPct, 0);
-      const grossLoss   = Math.abs(result.trades.filter(t => t.pnlPct <= 0).reduce((a, t) => a + t.pnlPct, 0));
+      const grossProfit = allTrades.filter(t => t.pnlPct > 0).reduce((a, t) => a + t.pnlPct, 0);
+      const grossLoss   = Math.abs(allTrades.filter(t => t.pnlPct <= 0).reduce((a, t) => a + t.pnlPct, 0));
       const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 99 : 0;
 
       // Sharpe approx
-      const pnls = result.trades.map(t => t.pnlPct);
+      const pnls = allTrades.map(t => t.pnlPct);
       const mean = pnls.length ? pnls.reduce((a, b) => a + b, 0) / pnls.length : 0;
       const variance = pnls.length > 1
         ? pnls.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (pnls.length - 1)
@@ -118,7 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         profitFactor:  parseFloat(profitFactor.toFixed(2)),
         sharpeApprox:  parseFloat(sharpe.toFixed(3)),
         equityCurve:   s.equityCurve,
-        trades:        result.trades,
+        trades:        allTrades,
       };
 
       await saveResults(sessionId, finalResults);
