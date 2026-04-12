@@ -56,6 +56,7 @@ export function runChunk(
     totalPnlPct: 0,
     equityCurve: [INITIAL_BALANCE],
     trade: null,
+    trades:[], // <--- ADD THIS LINE
   };
 
   const trades: TradeRecord[] = [];
