@@ -58,8 +58,13 @@ export function calculateRisk(
 ): RiskCalculation {
   const riskPct =
     parseFloat(process.env.RISK_PER_TRADE_PCT ?? "2") / 100;
+  /*
+  // Change this (Allows using up to 100% of balance to achieve the 2% risk target):
   const maxPositionPct =
-    parseFloat(process.env.MAX_POSITION_PCT ?? "5") / 100;
+    parseFloat(process.env.MAX_POSITION_PCT ?? "5") / 100; //changed below
+  */
+  const maxPositionPct = 
+    parseFloat(process.env.MAX_POSITION_PCT ?? "100") / 100;
 
   const riskAmountUsd = accountBalance * riskPct;
   const maxPositionUsd = accountBalance * maxPositionPct;
