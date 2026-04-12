@@ -177,3 +177,23 @@ export function computeVolumeRatio(
 
   return current.vol / avgVolume;
 }
+
+/**
+ * Computes Exponential Moving Average (EMA)
+ */
+export function computeEMA(candles: OKXCandle[], period: number = 200): number {
+  if (candles.length < period) return candles[candles.length - 1]?.close || 0;
+  
+  const k = 2 / (period + 1);
+  // Seed with simple average of first 'period' closes
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += candles[i].close;
+  let ema = sum / period;
+
+  // Compute EMA for the rest
+  for (let i = period; i < candles.length; i++) {
+    ema = (candles[i].close - ema) * k + ema;
+  }
+  
+  return ema;
+}
