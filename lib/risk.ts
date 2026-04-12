@@ -85,7 +85,7 @@ export function calculateRisk(
 
   // ATR volatility check: widen stop if it's tighter than 0.5×ATR
   const stopDistance = Math.abs(effectiveEntryPrice - stopLoss);
-  const effectiveStopDistance = Math.max(stopDistance, atr * 0.5);
+  const effectiveStopDistance = Math.max(stopDistance, atr * 1.0);
   if (effectiveStopDistance > stopDistance) {
     stopLoss =
       direction === "long"
