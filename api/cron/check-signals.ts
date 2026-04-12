@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { loadState, saveState } from "../../lib/redis";
 import { fetchCandles, fetchMarkPrice } from "../../lib/okx";
-import { computeRSI, computeATR, computeEMA } from "../../lib/indicators";
+import { computeRSI, computeATR, computeEMA, computeVolumeRatio } from "../../lib/indicators";
 import { calculateRisk } from "../../lib/risk";
 import { evaluateSignal } from "../../lib/signal";
 import { openPosition, updatePositions } from "../trade/execute";
@@ -19,7 +19,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   let state = await loadState();
 
   try {
-    // Fetch 15m candles for execution, 1H candles for trend logic
     const [candles15m, candles1h, markPrice] = await Promise.all([
         fetchCandles(symbol, "15m", 30),
         fetchCandles(symbol, "1H", 250), 
@@ -38,6 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const rsiValues = computeRSI(candles15m, 14);
+    const volumeRatio = computeVolumeRatio(candles15m, 20); // Added
     const currentRsi = rsiValues[rsiValues.length - 1];
     const prevRsi = rsiValues[rsiValues.length - 2];
     
@@ -48,25 +48,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const lastCandle = candles15m[candles15m.length - 1];
 
     const features: FeatureSet = {
-      currentPrice,
-      ema200,
-      ema50,
-      currentRsi,
-      prevRsi,
-      atr,
-      isGreen: lastCandle.close > lastCandle.open,
-      isRed: lastCandle.close < lastCandle.open
+      currentPrice, ema200, ema50, currentRsi, prevRsi, atr, volumeRatio,
+      isGreen: lastCandle.close > lastCandle.open, isRed: lastCandle.close < lastCandle.open
     };
 
     const hasOpenPosition = state.openPositions.length > 0;
     const signal = evaluateSignal(features);
 
     if (signal.triggered && signal.direction && !hasOpenPosition) {
-      // Risk math uses ATR instead of sweep extreme
-      const baseStop = signal.direction === "long" ? currentPrice - (atr * 1.5) : currentPrice + (atr * 1.5);
+      // 2.0 ATR STOP
+      const baseStop = signal.direction === "long" ? currentPrice - (atr * 2.0) : currentPrice + (atr * 2.0);
       const risk = calculateRisk(signal.direction, currentPrice, baseStop, atr, state.accountBalance);
 
-      await alertSignalTriggered(signal.direction, symbol, currentPrice, 0, 0); // Reused telegram alert
+      await alertSignalTriggered(signal.direction, symbol, currentPrice, 0, 0); 
       state = await openPosition(state, signal.direction, symbol, risk);
     }
 
@@ -75,4 +69,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
-}
+      }
