@@ -1,9 +1,5 @@
-// ─────────────────────────────────────────────────────────────
-// lib/backtestChunk.ts
-// ─────────────────────────────────────────────────────────────
-
 import { ChunkState } from "./backtestRedis";
-import { computeRSI, detectRSIDivergence, computeATR, computeVolumeRatio } from "./indicators";
+import { computeRSI, detectRSIDivergence, computeATR, computeVolumeRatio, computeEMA } from "./indicators";
 import { detectLiquiditySweep } from "./sweep";
 import { calculateRisk, TP1_CLOSE_FRACTION } from "./risk";
 import { evaluateSignal } from "./signal";
@@ -26,18 +22,16 @@ export function runChunk(
     wins: 0, losses: 0, totalPnlPct: 0, equityCurve:[INITIAL_BALANCE], trade: null, trades: []
   };
 
-  const trades: any[] =[];
+  const trades: any[] = [];
   const end = Math.min(startIndex + chunkSize, bars.length);
 
   for (let i = startIndex; i < end; i++) {
     const bar = bars[i];
 
-    // ── Manage open trade ──────────────────────────────────
     if (state.trade) {
-      const t = state.trade;
+      const t = state.trade as any;
       const isLong = t.direction === "long";
 
-      // Calculate trailing activation (disabled/widened mostly, relies on TP1/TP2)
       const trailActPrice = isLong ? t.entry * (1 + 0.05) : t.entry * (1 - 0.05);
       if (isLong && bar.high >= trailActPrice) {
           const newStop = bar.close * (1 - 0.02);
@@ -51,18 +45,17 @@ export function runChunk(
       const tp1Hit = isLong ? bar.high >= t.tp1  : bar.low  <= t.tp1;
       const tp2Hit = isLong ? bar.high >= t.tp2  : bar.low  <= t.tp2;
 
-      // Partial close at TP1
       if (!t.tp1Hit && tp1Hit) {
         t.tp1Hit = true;
         const partialPnlPct = isLong ? (t.tp1 - t.entry) / t.entry : (t.entry - t.tp1) / t.entry;
         const profitSecured = t.notional * TP1_CLOSE_FRACTION * partialPnlPct;
         
         state.balance += profitSecured;
-        t.realizedUsd = (t.realizedUsd || 0) + profitSecured; // Track secured profit
+        t.realizedUsd = (t.realizedUsd || 0) + profitSecured;
         
         t.size *= (1 - TP1_CLOSE_FRACTION);
         t.notional *= (1 - TP1_CLOSE_FRACTION);
-        t.stop = isLong ? Math.max(t.stop, t.entry) : Math.min(t.stop, t.entry); // Move to Break-Even
+        t.stop = isLong ? Math.max(t.stop, t.entry) : Math.min(t.stop, t.entry);
       }
 
       let closed = false;
@@ -82,7 +75,6 @@ export function runChunk(
         state.balance += finalProfit;
         t.realizedUsd = (t.realizedUsd || 0) + finalProfit;
 
-        // Calculate blended PnL % based on ORIGINAL full position size
         const blendedPnlPct = (t.realizedUsd / t.originalNotional) * 100;
         
         if (blendedPnlPct > 0) state.wins++; else state.losses++;
@@ -97,32 +89,33 @@ export function runChunk(
       }
     }
 
-    let lastTradeBar = -999;
-
     if (i % 50 === 0) state.equityCurve.push(parseFloat(state.balance.toFixed(2)));
 
     if (state.trade) continue;
-    if (i < 50) continue;
-    if (i - lastTradeBar < 8) continue; // NEW: 2 hour cooldown after a closed trade
 
-    const slice = bars.slice(Math.max(0, i - 60), i + 1);
+    // Cooldown logic: 8 bars = 2 hours cooldown after last closed trade
+    const lastTradeBar = state.trades.length > 0 ? state.trades[state.trades.length - 1].bar : -999;
+    if (i < 200) continue; // Need 200 bars warmup for EMA
+    if (i - lastTradeBar < 8) continue;
+
+    const slice = bars.slice(Math.max(0, i - 200), i + 1);
     const rsiValues   = computeRSI(slice as any, 14);
     const rsiDiv      = detectRSIDivergence(slice as any, rsiValues);
     const sweepResult = detectLiquiditySweep(slice as any);
     const volumeRatio = computeVolumeRatio(slice as any, 20);
     const atr         = computeATR(slice as any, 14);
+    const ema200      = computeEMA(slice as any, 200);
 
     const features: FeatureSet = {
       whaleScore: 0, sweepConfirmed: sweepResult.bullishSweep || sweepResult.bearishSweep,
       volumeRatio, rsiDivergent: rsiDiv.bullish || rsiDiv.bearish,
       rsiDirection: rsiDiv.bullish ? "bullish" : rsiDiv.bearish ? "bearish" : "none",
-      obImbalance: 0, currentPrice: bar.close, sweepLow: sweepResult.sweepLow, sweepHigh: sweepResult.sweepHigh, atr,
+      obImbalance: 0, currentPrice: bar.close, sweepLow: sweepResult.sweepLow, sweepHigh: sweepResult.sweepHigh, 
+      atr, ema200
     };
 
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
-
-    lastTradeBar = i; // NEW: Record when we entered
 
     const sweepExtreme = signal.direction === "long" ? sweepResult.sweepLow : sweepResult.sweepHigh;
     const risk = calculateRisk(signal.direction, bar.close, sweepExtreme, atr, state.balance);
@@ -132,7 +125,7 @@ export function runChunk(
       tp1: risk.takeProfitOne, tp2: risk.takeProfitTwo, tp1Hit: false,
       size: risk.positionSizeUsd / bar.close, notional: risk.positionSizeUsd,
       originalNotional: risk.positionSizeUsd, realizedUsd: 0
-    };
+    } as any;
   }
 
   state.nextIndex = end;
