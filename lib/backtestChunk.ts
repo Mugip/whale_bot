@@ -1,6 +1,5 @@
 import { ChunkState } from "./backtestRedis";
-import { computeRSI, detectRSIDivergence, computeATR, computeVolumeRatio, computeEMA } from "./indicators";
-import { detectLiquiditySweep } from "./sweep";
+import { computeRSI, computeATR, computeEMA } from "./indicators";
 import { calculateRisk, TP1_CLOSE_FRACTION } from "./risk";
 import { evaluateSignal } from "./signal";
 import { FeatureSet } from "../state/schema";
@@ -32,15 +31,6 @@ export function runChunk(
       const t = state.trade as any;
       const isLong = t.direction === "long";
 
-      const trailActPrice = isLong ? t.entry * (1 + 0.05) : t.entry * (1 - 0.05);
-      if (isLong && bar.high >= trailActPrice) {
-          const newStop = bar.close * (1 - 0.02);
-          if (newStop > t.stop) t.stop = newStop;
-      } else if (!isLong && bar.low <= trailActPrice) {
-          const newStop = bar.close * (1 + 0.02);
-          if (newStop < t.stop) t.stop = newStop;
-      }
-
       const slHit  = isLong ? bar.low  <= t.stop : bar.high >= t.stop;
       const tp1Hit = isLong ? bar.high >= t.tp1  : bar.low  <= t.tp1;
       const tp2Hit = isLong ? bar.high >= t.tp2  : bar.low  <= t.tp2;
@@ -55,7 +45,7 @@ export function runChunk(
         
         t.size *= (1 - TP1_CLOSE_FRACTION);
         t.notional *= (1 - TP1_CLOSE_FRACTION);
-        t.stop = isLong ? Math.max(t.stop, t.entry) : Math.min(t.stop, t.entry);
+        t.stop = t.entry; // Move stop to Breakeven
       }
 
       let closed = false;
@@ -74,7 +64,6 @@ export function runChunk(
         
         state.balance += finalProfit;
         t.realizedUsd = (t.realizedUsd || 0) + finalProfit;
-
         const blendedPnlPct = (t.realizedUsd / t.originalNotional) * 100;
         
         if (blendedPnlPct > 0) state.wins++; else state.losses++;
@@ -84,7 +73,6 @@ export function runChunk(
         trades.push(tRec);
         state.trades.push(tRec);
         state.trade = null;
-
         if (state.balance > state.peakBalance) state.peakBalance = state.balance;
       }
     }
@@ -93,32 +81,38 @@ export function runChunk(
 
     if (state.trade) continue;
 
-    // Cooldown logic: 8 bars = 2 hours cooldown after last closed trade
     const lastTradeBar = state.trades.length > 0 ? state.trades[state.trades.length - 1].bar : -999;
-    if (i < 200) continue; // Need 200 bars warmup for EMA
-    if (i - lastTradeBar < 8) continue;
+    if (i < 200) continue; 
+    if (i - lastTradeBar < 4) continue; // Shorter 1-hour cooldown for high-freq strategy
 
     const slice = bars.slice(Math.max(0, i - 200), i + 1);
-    const rsiValues   = computeRSI(slice as any, 14);
-    const rsiDiv      = detectRSIDivergence(slice as any, rsiValues);
-    const sweepResult = detectLiquiditySweep(slice as any);
-    const volumeRatio = computeVolumeRatio(slice as any, 20);
-    const atr         = computeATR(slice as any, 14);
-    const ema200      = computeEMA(slice as any, 200);
+    
+    // Calculate Indicators
+    const rsiValues = computeRSI(slice as any, 14);
+    const atr       = computeATR(slice as any, 14);
+    const ema200    = computeEMA(slice as any, 200);
+    const ema50     = computeEMA(slice as any, 50);
+    
+    const currentRsi = rsiValues[rsiValues.length - 1];
+    const prevRsi    = rsiValues[rsiValues.length - 2];
 
     const features: FeatureSet = {
-      whaleScore: 0, sweepConfirmed: sweepResult.bullishSweep || sweepResult.bearishSweep,
-      volumeRatio, rsiDivergent: rsiDiv.bullish || rsiDiv.bearish,
-      rsiDirection: rsiDiv.bullish ? "bullish" : rsiDiv.bearish ? "bearish" : "none",
-      obImbalance: 0, currentPrice: bar.close, sweepLow: sweepResult.sweepLow, sweepHigh: sweepResult.sweepHigh, 
-      atr, ema200
+      currentPrice: bar.close,
+      ema200,
+      ema50,
+      currentRsi,
+      prevRsi,
+      atr,
+      isGreen: bar.close > bar.open,
+      isRed: bar.close < bar.open
     };
 
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
 
-    const sweepExtreme = signal.direction === "long" ? sweepResult.sweepLow : sweepResult.sweepHigh;
-    const risk = calculateRisk(signal.direction, bar.close, sweepExtreme, atr, state.balance);
+    // We no longer have "sweep extremes", so we set the initial stop loss based purely on ATR
+    const baseStop = signal.direction === "long" ? bar.close - (atr * 1.5) : bar.close + (atr * 1.5);
+    const risk = calculateRisk(signal.direction, bar.close, baseStop, atr, state.balance);
 
     state.trade = {
       direction: signal.direction, entry: bar.close, stop: risk.stopLoss,
@@ -130,4 +124,4 @@ export function runChunk(
 
   state.nextIndex = end;
   return { state, trades, nextIndex: end, done: end >= bars.length };
-}
+          }
