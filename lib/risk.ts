@@ -1,14 +1,10 @@
 import { TradeDirection } from "../state/schema";
 
-const STOP_BUFFER_PCT = 0.004;         // Widened to 0.4%
-const TRAILING_ACTIVATION_PCT = 0.015;
-const TRAILING_DISTANCE_PCT = 0.01;    
-
 const ENTRY_FEE_PCT = 0.001;  
 const EXIT_FEE_PCT  = 0.001;  
 
-const ATR_TP1_MULT = 2.0; // Widened
-const ATR_TP2_MULT = 4.0; // Let runners run
+const ATR_TP1_MULT = 1.5; // Quick 1:1 risk/reward to secure capital
+const ATR_TP2_MULT = 4.5; // Let the runners run massively
 
 export interface RiskCalculation {
   positionSizeUsd: number; entryPrice: number; effectiveEntryPrice: number; stopLoss: number;
@@ -17,7 +13,7 @@ export interface RiskCalculation {
 }
 
 export function calculateRisk(
-  direction: TradeDirection, entryPrice: number, sweepExtreme: number, atr: number, accountBalance: number
+  direction: TradeDirection, entryPrice: number, baseStop: number, atr: number, accountBalance: number
 ): RiskCalculation {
   const riskPct = parseFloat(process.env.RISK_PER_TRADE_PCT ?? "2") / 100;
   const maxPositionPct = parseFloat(process.env.MAX_POSITION_PCT ?? "100") / 100;
@@ -27,26 +23,17 @@ export function calculateRisk(
 
   const effectiveEntryPrice = direction === "long" ? entryPrice * (1 + ENTRY_FEE_PCT) : entryPrice * (1 - ENTRY_FEE_PCT);
 
-  let stopLoss: number;
-  if (direction === "long") stopLoss = sweepExtreme * (1 - STOP_BUFFER_PCT);
-  else stopLoss = sweepExtreme * (1 + STOP_BUFFER_PCT);
+  let stopLoss = baseStop;
 
-  const stopDistance = Math.abs(effectiveEntryPrice - stopLoss);
-  const effectiveStopDistance = Math.max(stopDistance, atr * 1.0);
-  if (effectiveStopDistance > stopDistance) {
-    stopLoss = direction === "long" ? effectiveEntryPrice - effectiveStopDistance : effectiveEntryPrice + effectiveStopDistance;
-  }
-
-  let takeProfitOne: number; let takeProfitTwo: number; let trailingActivationPrice: number;
+  let takeProfitOne: number; let takeProfitTwo: number; 
+  const trailingActivationPrice = 0; // Disabled trailing logic in favor of hard targets
 
   if (direction === "long") {
     takeProfitOne = effectiveEntryPrice + atr * ATR_TP1_MULT;
     takeProfitTwo = effectiveEntryPrice + atr * ATR_TP2_MULT;
-    trailingActivationPrice = effectiveEntryPrice * (1 + TRAILING_ACTIVATION_PCT);
   } else {
     takeProfitOne = effectiveEntryPrice - atr * ATR_TP1_MULT;
     takeProfitTwo = effectiveEntryPrice - atr * ATR_TP2_MULT;
-    trailingActivationPrice = effectiveEntryPrice * (1 - TRAILING_ACTIVATION_PCT);
   }
 
   const riskPerUnit = Math.abs(effectiveEntryPrice - stopLoss);
@@ -62,11 +49,4 @@ export function calculateRisk(
   };
 }
 
-export function updateTrailingStop(direction: TradeDirection, currentPrice: number, currentStop: number, trailingActive: boolean): number {
-  if (!trailingActive) return currentStop;
-  const newStop = direction === "long" ? currentPrice * (1 - TRAILING_DISTANCE_PCT) : currentPrice * (1 + TRAILING_DISTANCE_PCT);
-  return direction === "long" ? Math.max(currentStop, newStop) : Math.min(currentStop, newStop);
-}
-
-export const TRAILING_ACTIVATION_PCT_EXPORT = TRAILING_ACTIVATION_PCT;
 export const TP1_CLOSE_FRACTION = 0.5;
