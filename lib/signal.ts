@@ -44,46 +44,19 @@ export interface SignalResult {
 }
 
 // ─── Core condition checkers ──────────────────────────────────
-
-function checkLongCore(
-  features: FeatureSet,
-  withinHours: boolean
-): { pass: boolean; failures: string[] } {
+function checkLongCore(features: FeatureSet, withinHours: boolean) {
   const failures: string[] = [];
-
-  if (!features.sweepConfirmed) {
-    failures.push("bullish liquidity sweep not confirmed");
-  }
-  if (features.volumeRatio < VOLUME_RATIO_THRESHOLD) {
-    failures.push(
-      `volumeRatio ${features.volumeRatio.toFixed(2)} < ${VOLUME_RATIO_THRESHOLD}`
-    );
-  }
-  if (!withinHours) {
-    failures.push("outside trading hours (08:00–20:00 UTC)");
-  }
-
+  if (!features.sweepConfirmed) failures.push("bullish sweep not confirmed");
+  if (features.volumeRatio < VOLUME_RATIO_THRESHOLD) failures.push("volume too low");
+  if (features.currentPrice < features.ema200) failures.push("Price below 200 EMA (Downtrend)"); // NEW
   return { pass: failures.length === 0, failures };
 }
 
-function checkShortCore(
-  features: FeatureSet,
-  withinHours: boolean
-): { pass: boolean; failures: string[] } {
+function checkShortCore(features: FeatureSet, withinHours: boolean) {
   const failures: string[] = [];
-
-  if (!features.sweepConfirmed) {
-    failures.push("bearish liquidity sweep not confirmed");
-  }
-  if (features.volumeRatio < VOLUME_RATIO_THRESHOLD) {
-    failures.push(
-      `volumeRatio ${features.volumeRatio.toFixed(2)} < ${VOLUME_RATIO_THRESHOLD}`
-    );
-  }
-  if (!withinHours) {
-    failures.push("outside trading hours (08:00–20:00 UTC)");
-  }
-
+  if (!features.sweepConfirmed) failures.push("bearish sweep not confirmed");
+  if (features.volumeRatio < VOLUME_RATIO_THRESHOLD) failures.push("volume too low");
+  if (features.currentPrice > features.ema200) failures.push("Price above 200 EMA (Uptrend)"); // NEW
   return { pass: failures.length === 0, failures };
 }
 
