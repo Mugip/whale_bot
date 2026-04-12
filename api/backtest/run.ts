@@ -99,16 +99,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (dd > maxDD) maxDD = dd;
       }
 
+      
       // Gross profit / loss for profit factor
-      const grossProfit = allTrades.filter(t => t.pnlPct > 0).reduce((a, t) => a + t.pnlPct, 0);
-      const grossLoss   = Math.abs(allTrades.filter(t => t.pnlPct <= 0).reduce((a, t) => a + t.pnlPct, 0));
+      const grossProfit = allTrades.filter((t: any) => t.pnlPct > 0).reduce((a: number, t: any) => a + t.pnlPct, 0);
+      const grossLoss   = Math.abs(allTrades.filter((t: any) => t.pnlPct <= 0).reduce((a: number, t: any) => a + t.pnlPct, 0));
       const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 99 : 0;
 
       // Sharpe approx
-      const pnls = allTrades.map(t => t.pnlPct);
-      const mean = pnls.length ? pnls.reduce((a, b) => a + b, 0) / pnls.length : 0;
+      const pnls = allTrades.map((t: any) => t.pnlPct);
+      const mean = pnls.length ? pnls.reduce((a: number, b: number) => a + b, 0) / pnls.length : 0;
       const variance = pnls.length > 1
-        ? pnls.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (pnls.length - 1)
+        ? pnls.reduce((a: number, b: number) => a + Math.pow(b - mean, 2), 0) / (pnls.length - 1)
         : 0;
       const sharpe = variance > 0 ? mean / Math.sqrt(variance) : 0;
 
