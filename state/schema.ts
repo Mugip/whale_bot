@@ -22,13 +22,13 @@ export interface SignalSnapshot {
 export interface BotState {
   openPositions: Position[]; tradeHistory: ClosedTrade[]; lastSignalTimestamp: number;
   accountBalance: number; lastUpdated: number;
-  whaleScoreHistory: any[]; // Kept so redis state doesn't break
+  whaleScoreHistory: any[]; 
 }
 
 export function createDefaultState(): BotState {
   return {
-    openPositions: [], tradeHistory: [], lastSignalTimestamp: 0,
-    whaleScoreHistory: [], accountBalance: parseFloat(process.env.PAPER_INITIAL_BALANCE ?? "10000"), lastUpdated: Date.now(),
+    openPositions:[], tradeHistory: [], lastSignalTimestamp: 0,
+    whaleScoreHistory:[], accountBalance: parseFloat(process.env.PAPER_INITIAL_BALANCE ?? "10000"), lastUpdated: Date.now(),
   };
 }
 
@@ -39,6 +39,7 @@ export interface FeatureSet {
   currentRsi: number;
   prevRsi: number;
   atr: number;
+  volumeRatio: number; // <-- Added back
   isGreen: boolean;
   isRed: boolean;
 }
