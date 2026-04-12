@@ -3,8 +3,8 @@ import { TradeDirection } from "../state/schema";
 const ENTRY_FEE_PCT = 0.001;  
 const EXIT_FEE_PCT  = 0.001;  
 
-const ATR_TP1_MULT = 1.5; // Quick 1:1 risk/reward to secure capital
-const ATR_TP2_MULT = 4.5; // Let the runners run massively
+const ATR_TP1_MULT = 2.0; // Wait for a real 1:1 move before taking partials
+const ATR_TP2_MULT = 4.0; // Let the runner capture massive trends
 
 export interface RiskCalculation {
   positionSizeUsd: number; entryPrice: number; effectiveEntryPrice: number; stopLoss: number;
@@ -26,7 +26,7 @@ export function calculateRisk(
   let stopLoss = baseStop;
 
   let takeProfitOne: number; let takeProfitTwo: number; 
-  const trailingActivationPrice = 0; // Disabled trailing logic in favor of hard targets
+  const trailingActivationPrice = 0; 
 
   if (direction === "long") {
     takeProfitOne = effectiveEntryPrice + atr * ATR_TP1_MULT;
