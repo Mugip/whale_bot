@@ -177,7 +177,10 @@ export default async function handler(
     : { bullishSweep: false, bearishSweep: false, sweepLow: 0, sweepHigh: 0 };
 
   const volumeRatio = candles15m ? computeVolumeRatio(candles15m, 20) : 0;
+  
+  // Use 1H for Volatility and Trend
   const atr = candles1h ? computeATR(candles1h, 14) : 0;
+  const ema200 = candles1h ? computeEMA(candles1h, 200) : 0; // FIXED: Uses candles1h instead of slice
 
   const obResult = orderBook
     ? computeOrderBookImbalance(orderBook)
@@ -198,6 +201,7 @@ export default async function handler(
     sweepLow: sweepResult.sweepLow,
     sweepHigh: sweepResult.sweepHigh,
     atr,
+    ema200,
   };
 
   logger.info("Features computed", {
