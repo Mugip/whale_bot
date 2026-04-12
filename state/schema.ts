@@ -107,4 +107,5 @@ export interface FeatureSet {
   sweepLow: number;
   sweepHigh: number;
   atr: number;
+  ema200: number;
 }
