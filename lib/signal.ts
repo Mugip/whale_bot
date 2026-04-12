@@ -7,31 +7,24 @@ export interface SignalResult {
 }
 
 export function evaluateSignal(features: FeatureSet): SignalResult {
-  const { currentPrice, ema50, ema200, currentRsi, prevRsi, isGreen, isRed } = features;
+  const { currentPrice, ema50, ema200, currentRsi, prevRsi } = features;
   const reasons: string[] = [];
 
-  // ─── LONG CONDITION: Trend + Oversold Pullback + Bullish Resumption ───
+  // ─── LONG CONDITION: Trend + RSI Crosses back ABOVE 40 ───
   const isUptrend = ema50 > ema200 && currentPrice > ema200;
-  const isOversoldPullback = prevRsi < 40; // RSI dipped indicating a pullback
-  const isTurningUp = currentRsi > prevRsi && isGreen; // Momentum returning
+  const isOversoldCrossUp = prevRsi < 40 && currentRsi >= 40; // True Momentum Shift
 
-  if (isUptrend && isOversoldPullback && isTurningUp) {
-    return { triggered: true, direction: "long", reasons: ["Trend Pullback Long"] };
+  if (isUptrend && isOversoldCrossUp) {
+    return { triggered: true, direction: "long", reasons: ["Trend Pullback Long (RSI Cross Up)"] };
   }
 
-  // ─── SHORT CONDITION: Downtrend + Overbought Pullback + Bearish Resumption ───
+  // ─── SHORT CONDITION: Trend + RSI Crosses back BELOW 60 ───
   const isDowntrend = ema50 < ema200 && currentPrice < ema200;
-  const isOverboughtPullback = prevRsi > 60; // RSI spiked indicating a relief rally
-  const isTurningDown = currentRsi < prevRsi && isRed; // Momentum returning down
+  const isOverboughtCrossDown = prevRsi > 60 && currentRsi <= 60; // True Momentum Shift
 
-  if (isDowntrend && isOverboughtPullback && isTurningDown) {
-    return { triggered: true, direction: "short", reasons: ["Trend Pullback Short"] };
+  if (isDowntrend && isOverboughtCrossDown) {
+    return { triggered: true, direction: "short", reasons: ["Trend Pullback Short (RSI Cross Down)"] };
   }
-
-  // Debugging info (optional)
-  if (!isUptrend && !isDowntrend) reasons.push("No clear trend (EMA 50/200 conflict)");
-  if (isUptrend && !isOversoldPullback) reasons.push("Waiting for RSI < 40 pullback");
-  if (isDowntrend && !isOverboughtPullback) reasons.push("Waiting for RSI > 60 pullback");
 
   return { triggered: false, direction: null, reasons };
 }
