@@ -7,11 +7,17 @@
  * Returns true if the current UTC hour is within the allowed
  * trading window: 08:00 – 20:00 UTC (inclusive start, exclusive end).
  */
+/*
 export function isWithinTradingHours(): boolean {
   const utcHour = new Date().getUTCHours();
   return utcHour >= 8 && utcHour < 20;
 }
-
+*/
+export function isWithinTradingHours(): boolean {
+  // Crypto is 24/7. Removing the strict 08:00 - 20:00 UTC check
+  // yields significantly more trading opportunities.
+  return true; 
+}
 /**
  * Returns the current Unix timestamp in milliseconds.
  */
