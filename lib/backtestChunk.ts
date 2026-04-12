@@ -97,10 +97,13 @@ export function runChunk(
       }
     }
 
+    let lastTradeBar = -999;
+
     if (i % 50 === 0) state.equityCurve.push(parseFloat(state.balance.toFixed(2)));
 
     if (state.trade) continue;
     if (i < 50) continue;
+    if (i - lastTradeBar < 8) continue; // NEW: 2 hour cooldown after a closed trade
 
     const slice = bars.slice(Math.max(0, i - 60), i + 1);
     const rsiValues   = computeRSI(slice as any, 14);
@@ -118,6 +121,8 @@ export function runChunk(
 
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
+
+    lastTradeBar = i; // NEW: Record when we entered
 
     const sweepExtreme = signal.direction === "long" ? sweepResult.sweepLow : sweepResult.sweepHigh;
     const risk = calculateRisk(signal.direction, bar.close, sweepExtreme, atr, state.balance);
