@@ -138,6 +138,16 @@
       background: var(--accent);
       color: white;
     }
+    /* Mobile Responsive Fixes */
+    @media (max-width: 768px) {
+      .stats-grid { 
+        grid-template-columns: 1fr; /* Stacks the boxes vertically on phones */
+      }
+      .stat-value {
+        font-size: 24px; /* Slightly smaller text for mobile */
+      }
+    }
+  
 
   </style>
 </head>
