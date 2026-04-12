@@ -1,8 +1,3 @@
-// ─────────────────────────────────────────────────────────────
-// lib/backtest.ts
-// Standalone bar-by-bar backtesting engine for Trend-Pullback.
-// ─────────────────────────────────────────────────────────────
-
 import { computeRSI, computeATR, computeEMA } from "./indicators";
 import { calculateRisk, TP1_CLOSE_FRACTION } from "./risk";
 import { evaluateSignal } from "./signal";
@@ -10,34 +5,17 @@ import { OKXCandle } from "./okx";
 import { FeatureSet, TradeDirection } from "../state/schema";
 
 export interface BacktestTrade {
-  openBar: number;
-  closeBar: number;
-  direction: TradeDirection;
-  entryPrice: number;
-  exitPrice: number;
-  stopLoss: number;
-  takeProfitOne: number;
-  takeProfitTwo: number;
-  pnlPct: number;
-  closeReason: "tp1" | "tp2" | "sl" | "end_of_data";
+  openBar: number; closeBar: number; direction: TradeDirection; entryPrice: number; exitPrice: number;
+  stopLoss: number; takeProfitOne: number; takeProfitTwo: number; pnlPct: number; closeReason: "tp1" | "tp2" | "sl" | "end_of_data";
 }
 
 export interface BacktestResult {
-  trades: BacktestTrade[];
-  totalTrades: number;
-  winRate: number;
-  avgPnlPct: number;
-  totalPnlPct: number;
-  maxDrawdownPct: number;
-  profitFactor: number;
-  sharpeApprox: number;
+  trades: BacktestTrade[]; totalTrades: number; winRate: number; avgPnlPct: number; totalPnlPct: number;
+  maxDrawdownPct: number; profitFactor: number; sharpeApprox: number;
 }
 
 export function runBacktest(
-  candles15m: OKXCandle[],
-  candles1h: OKXCandle[],
-  initialBalance = 10_000,
-  warmupBars = 200 // Increased warmup for the 200 EMA
+  candles15m: OKXCandle[], candles1h: OKXCandle[], initialBalance = 10_000, warmupBars = 200 
 ): BacktestResult {
   const trades: BacktestTrade[] = [];
   let balance = initialBalance;
@@ -47,8 +25,7 @@ export function runBacktest(
   const getH1Index = (bar15mTs: number): number => {
     let idx = 0;
     for (let i = 0; i < candles1h.length; i++) {
-      if (candles1h[i].ts <= bar15mTs) idx = i;
-      else break;
+      if (candles1h[i].ts <= bar15mTs) idx = i; else break;
     }
     return idx;
   };
@@ -62,7 +39,6 @@ export function runBacktest(
     const h1Idx = getH1Index(bar.ts);
     const slice1h = candles1h.slice(0, h1Idx + 1);
 
-    // ── Update open trade ──────────────
     if (openTrade) {
       const { high, low, close } = bar;
       const isLong = openTrade.direction === "long";
@@ -73,117 +49,79 @@ export function runBacktest(
 
       if (!openTrade.tp1Hit && tp1Hit) {
         openTrade.tp1Hit = true;
-        const partialPnl = isLong
-          ? (openTrade.takeProfitOne - openTrade.entryPrice) / openTrade.entryPrice
-          : (openTrade.entryPrice - openTrade.takeProfitOne) / openTrade.entryPrice;
+        const partialPnl = isLong ? (openTrade.takeProfitOne - openTrade.entryPrice) / openTrade.entryPrice : (openTrade.entryPrice - openTrade.takeProfitOne) / openTrade.entryPrice;
         balance += openTrade.notional * TP1_CLOSE_FRACTION * partialPnl;
         openTrade.size *= 1 - TP1_CLOSE_FRACTION;
         openTrade.notional *= 1 - TP1_CLOSE_FRACTION;
-        openTrade.stopLoss = openTrade.entryPrice; // BE
+        // NO BREAKEVEN MOVEMENT
       }
 
       let closed = false;
       let exitPrice = close;
       let reason: BacktestTrade["closeReason"] = "sl";
 
-      if (slHit) {
-        exitPrice = openTrade.stopLoss;
-        reason = "sl";
-        closed = true;
-      } else if (openTrade.tp1Hit && tp2Hit) {
-        exitPrice = openTrade.takeProfitTwo;
-        reason = "tp2";
-        closed = true;
-      }
+      if (slHit) { exitPrice = openTrade.stopLoss; reason = "sl"; closed = true; } 
+      else if (openTrade.tp1Hit && tp2Hit) { exitPrice = openTrade.takeProfitTwo; reason = "tp2"; closed = true; }
 
       if (closed) {
-        const pnlPct = isLong
-          ? (exitPrice - openTrade.entryPrice) / openTrade.entryPrice
-          : (openTrade.entryPrice - exitPrice) / openTrade.entryPrice;
-
+        const pnlPct = isLong ? (exitPrice - openTrade.entryPrice) / openTrade.entryPrice : (openTrade.entryPrice - exitPrice) / openTrade.entryPrice;
         balance += openTrade.notional * pnlPct;
 
         trades.push({
-          openBar: openTrade.openBar,
-          closeBar: i,
-          direction: openTrade.direction,
-          entryPrice: openTrade.entryPrice,
-          exitPrice,
-          stopLoss: openTrade.stopLoss,
-          takeProfitOne: openTrade.takeProfitOne,
-          takeProfitTwo: openTrade.takeProfitTwo,
-          pnlPct: pnlPct * 100,
-          closeReason: reason,
+          openBar: openTrade.openBar, closeBar: i, direction: openTrade.direction,
+          entryPrice: openTrade.entryPrice, exitPrice, stopLoss: openTrade.stopLoss,
+          takeProfitOne: openTrade.takeProfitOne, takeProfitTwo: openTrade.takeProfitTwo,
+          pnlPct: pnlPct * 100, closeReason: reason,
         });
 
         openTrade = null;
-        lastTradeBar = i; // Record cooldown
+        lastTradeBar = i; 
 
         if (balance > peakBalance) peakBalance = balance;
         const drawdown = ((peakBalance - balance) / peakBalance) * 100;
         if (drawdown > maxDrawdownPct) maxDrawdownPct = drawdown;
       }
-
       continue; 
     }
 
-    // ── Compute features for entry evaluation ──────────────
     if (slice1h.length < 200) continue; 
-    if (i - lastTradeBar < 4) continue; // High freq cooldown (1 hour)
+    if (i - lastTradeBar < 4) continue; 
 
-    const rsiValues = computeRSI(slice15m, 14); // 15m RSI for triggers
-    const atr = computeATR(slice1h, 14);        // 1H ATR for volatility
-    const ema200 = computeEMA(slice1h, 200);    // 1H Macro Trend
-    const ema50 = computeEMA(slice1h, 50);      // 1H Micro Trend
+    const rsiValues = computeRSI(slice15m, 14); 
+    const atr = computeATR(slice1h, 14);        
+    const ema200 = computeEMA(slice1h, 200);    
+    const ema50 = computeEMA(slice1h, 50);      
 
     const currentRsi = rsiValues[rsiValues.length - 1];
     const prevRsi = rsiValues[rsiValues.length - 2];
 
     const features: FeatureSet = {
-      currentPrice: bar.close,
-      ema200,
-      ema50,
-      currentRsi,
-      prevRsi,
-      atr,
-      isGreen: bar.close > bar.open,
-      isRed: bar.close < bar.open
+      currentPrice: bar.close, ema200, ema50, currentRsi, prevRsi, atr,
+      isGreen: bar.close > bar.open, isRed: bar.close < bar.open
     };
 
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
 
-    // ATR-based stops
     const baseStop = signal.direction === "long" ? bar.close - (atr * 1.5) : bar.close + (atr * 1.5);
     const risk = calculateRisk(signal.direction, bar.close, baseStop, atr, balance);
 
     openTrade = {
-      direction: signal.direction,
-      entryPrice: bar.close,
-      effectiveEntry: risk.effectiveEntryPrice,
-      stopLoss: risk.stopLoss,
-      takeProfitOne: risk.takeProfitOne,
-      takeProfitTwo: risk.takeProfitTwo,
-      openBar: i,
-      tp1Hit: false,
-      size: risk.positionSizeUsd / bar.close,
-      notional: risk.positionSizeUsd,
+      direction: signal.direction, entryPrice: bar.close, effectiveEntry: risk.effectiveEntryPrice,
+      stopLoss: risk.stopLoss, takeProfitOne: risk.takeProfitOne, takeProfitTwo: risk.takeProfitTwo,
+      openBar: i, tp1Hit: false, size: risk.positionSizeUsd / bar.close, notional: risk.positionSizeUsd,
     };
   }
 
-  // Close at end
   if (openTrade) {
     const lastBar = candles15m[candles15m.length - 1];
     const exitPrice = lastBar.close;
     const isLong = openTrade.direction === "long";
-    const pnlPct = isLong
-      ? (exitPrice - openTrade.entryPrice) / openTrade.entryPrice
-      : (openTrade.entryPrice - exitPrice) / openTrade.entryPrice;
+    const pnlPct = isLong ? (exitPrice - openTrade.entryPrice) / openTrade.entryPrice : (openTrade.entryPrice - exitPrice) / openTrade.entryPrice;
 
     trades.push({
       openBar: openTrade.openBar, closeBar: candles15m.length - 1, direction: openTrade.direction,
-      entryPrice: openTrade.entryPrice, exitPrice, stopLoss: openTrade.stopLoss,
-      takeProfitOne: openTrade.takeProfitOne, takeProfitTwo: openTrade.takeProfitTwo,
+      entryPrice: openTrade.entryPrice, exitPrice, stopLoss: openTrade.stopLoss, takeProfitOne: openTrade.takeProfitOne, takeProfitTwo: openTrade.takeProfitTwo,
       pnlPct: pnlPct * 100, closeReason: "end_of_data",
     });
   }
@@ -202,4 +140,4 @@ export function runBacktest(
   const sharpeApprox = variance > 0 ? mean / Math.sqrt(variance) : 0;
 
   return { trades, totalTrades: trades.length, winRate, avgPnlPct, totalPnlPct, maxDrawdownPct, profitFactor, sharpeApprox };
-    }
+}
