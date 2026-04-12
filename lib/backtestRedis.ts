@@ -61,11 +61,28 @@ export async function listSessions(): Promise<BacktestSession[]> {
 }
 
 export interface ChunkState {
-  nextIndex: number; balance: number; peakBalance: number; wins: number; losses: number;
-  totalPnlPct: number; equityCurve: number[];
-  trade: null | { direction: "long" | "short"; entry: number; stop: number; tp1: number; tp2: number; tp1Hit: boolean; size: number; notional: number; };
-  trades: any[]; // <--- ADD THIS LINE
+  nextIndex: number; 
+  balance: number; 
+  peakBalance: number; 
+  wins: number; 
+  losses: number;
+  totalPnlPct: number; 
+  equityCurve: number[];
+  trade: null | { 
+    direction: "long" | "short"; 
+    entry: number; 
+    stop: number; 
+    tp1: number; 
+    tp2: number; 
+    tp1Hit: boolean; 
+    size: number; 
+    notional: number; 
+    originalNotional: number; 
+    realizedUsd: number; 
+  };
+  trades: any[];
 }
+
 
 export async function saveChunkState(id: string, state: ChunkState): Promise<void> {
   await withRedis(async (r) => { await r.set(K.progress(id), JSON.stringify(state), "EX", 86400); });
