@@ -3,9 +3,8 @@ import { TradeDirection } from "../state/schema";
 const ENTRY_FEE_PCT = 0.001;  
 const EXIT_FEE_PCT  = 0.001;  
 
-// Mean Reversion Risk Math: Grab profit quickly (1.2), keep stop wide enough to survive the rubber band (2.0)
-const ATR_TP1_MULT = 1.2; 
-const ATR_TP2_MULT = 2.5; 
+const ATR_TP1_MULT = 2.0; 
+const ATR_TP2_MULT = 5.0; // Captures massive Altcoin trends
 
 export interface RiskCalculation {
   positionSizeUsd: number; entryPrice: number; effectiveEntryPrice: number; stopLoss: number;
@@ -16,7 +15,8 @@ export interface RiskCalculation {
 export function calculateRisk(
   direction: TradeDirection, entryPrice: number, baseStop: number, atr: number, accountBalance: number
 ): RiskCalculation {
-  const riskPct = parseFloat(process.env.RISK_PER_TRADE_PCT ?? "2") / 100;
+  // REDUCED TO 1.5% TO COMPRESS DRAWDOWN UNDER 10%
+  const riskPct = parseFloat(process.env.RISK_PER_TRADE_PCT ?? "1.5") / 100;
   const maxPositionPct = parseFloat(process.env.MAX_POSITION_PCT ?? "100") / 100;
 
   const riskAmountUsd = accountBalance * riskPct;
