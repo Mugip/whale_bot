@@ -91,8 +91,8 @@ export function runBacktest(
     const volumeRatio = computeVolumeRatio(slice15m, 20);
     const atr         = computeATR(slice1h, 14);        
     const ema200      = computeEMA(slice1h, 200);    
-    const ema50       = computeEMA(slice1h, 50);  
-    const adx         = computeADX(slice as any, 14);
+    const ema50       = computeEMA(slice1h, 50);      
+    const adx         = computeADX(slice1h, 14); // FIXED: Uses slice1h
 
     const currentRsi = rsiValues[rsiValues.length - 1];
     const prevRsi = rsiValues[rsiValues.length - 2];
@@ -105,7 +105,6 @@ export function runBacktest(
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
 
-    // 2.5 ATR STOP for Altcoins
     const baseStop = signal.direction === "long" ? bar.close - (atr * 2.5) : bar.close + (atr * 2.5);
     const risk = calculateRisk(signal.direction, bar.close, baseStop, atr, balance);
 
@@ -143,4 +142,4 @@ export function runBacktest(
   const sharpeApprox = variance > 0 ? mean / Math.sqrt(variance) : 0;
 
   return { trades, totalTrades: trades.length, winRate, avgPnlPct, totalPnlPct, maxDrawdownPct, profitFactor, sharpeApprox };
-      }
+}
