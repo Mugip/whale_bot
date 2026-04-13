@@ -199,3 +199,29 @@ export function computeADX(candles: OKXCandle[], period: number = 14): number {
 
   return adx;
 }
+
+/**
+ * Computes Bollinger Bands (Upper, Middle, Lower)
+ */
+export function computeBollingerBands(candles: OKXCandle[], period: number = 20, stdDev: number = 2.5) {
+  if (candles.length < period) return { upper: 0, middle: 0, lower: 0 };
+  
+  let sum = 0;
+  for (let i = candles.length - period; i < candles.length; i++) {
+    sum += candles[i].close;
+  }
+  const middle = sum / period;
+
+  let varianceSum = 0;
+  for (let i = candles.length - period; i < candles.length; i++) {
+    varianceSum += Math.pow(candles[i].close - middle, 2);
+  }
+  const variance = varianceSum / period;
+  const std = Math.sqrt(variance);
+
+  return {
+    upper: middle + (std * stdDev),
+    middle: middle,
+    lower: middle - (std * stdDev)
+  };
+}
