@@ -3,8 +3,8 @@ import { TradeDirection } from "../state/schema";
 const ENTRY_FEE_PCT = 0.001;  
 const EXIT_FEE_PCT  = 0.001;  
 
-const ATR_TP1_MULT = 2.0; // Wait for a real 1:1 move before taking partials
-const ATR_TP2_MULT = 4.0; // Let the runner capture massive trends
+const ATR_TP1_MULT = 2.0; 
+const ATR_TP2_MULT = 5.0; // Increased from 4.0 to capture massive Altcoin trends
 
 export interface RiskCalculation {
   positionSizeUsd: number; entryPrice: number; effectiveEntryPrice: number; stopLoss: number;
