@@ -1,5 +1,5 @@
 import { ChunkState } from "./backtestRedis";
-import { computeRSI, computeATR, computeEMA, computeVolumeRatio } from "./indicators";
+import { computeRSI, computeATR, computeEMA, computeVolumeRatio, computeADX } from "./indicators";
 import { calculateRisk, TP1_CLOSE_FRACTION } from "./risk";
 import { evaluateSignal } from "./signal";
 import { FeatureSet } from "../state/schema";
@@ -93,13 +93,14 @@ export function runChunk(
     const ema200      = computeEMA(slice as any, 200);
     const ema50       = computeEMA(slice as any, 50);
     const volumeRatio = computeVolumeRatio(slice as any, 20); 
+    const adx         = computeADX(slice as any, 14);
     
     const currentRsi = rsiValues[rsiValues.length - 1];
     const prevRsi    = rsiValues[rsiValues.length - 2];
 
     const features: FeatureSet = {
       currentPrice: bar.close,
-      ema200, ema50, currentRsi, prevRsi, atr, volumeRatio,
+      ema200, ema50, currentRsi, prevRsi, atr, volumeRatio,adx,
       isGreen: bar.close > bar.open, isRed: bar.close < bar.open
     };
 
