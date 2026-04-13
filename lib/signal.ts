@@ -7,25 +7,26 @@ export interface SignalResult {
 }
 
 export function evaluateSignal(features: FeatureSet): SignalResult {
-  const { currentPrice, ema50, ema200, currentRsi, prevRsi, volumeRatio } = features;
+  const { currentPrice, ema50, ema200, currentRsi, prevRsi, volumeRatio, adx } = features;
   const reasons: string[] =[];
 
   const isVolumeBreakout = volumeRatio >= 1.0; 
+  const isTrending = adx > 20; // NEW: Market must be actively trending
 
-  // ─── LONG CONDITION: Trend + RSI Crosses back ABOVE 45 + High Volume ───
+  // ─── LONG CONDITION ───
   const isUptrend = ema50 > ema200 && currentPrice > ema200;
-  const isOversoldCrossUp = prevRsi < 45 && currentRsi >= 45; // Changed from 40 to 45
+  const isOversoldCrossUp = prevRsi < 45 && currentRsi >= 45; 
 
-  if (isUptrend && isOversoldCrossUp && isVolumeBreakout) {
-    return { triggered: true, direction: "long", reasons:["Trend Pullback Long (RSI Cross Up + Volume)"] };
+  if (isUptrend && isOversoldCrossUp && isVolumeBreakout && isTrending) {
+    return { triggered: true, direction: "long", reasons:["Trend Pullback Long (ADX > 20)"] };
   }
 
-  // ─── SHORT CONDITION: Trend + RSI Crosses back BELOW 55 + High Volume ───
+  // ─── SHORT CONDITION ───
   const isDowntrend = ema50 < ema200 && currentPrice < ema200;
-  const isOverboughtCrossDown = prevRsi > 55 && currentRsi <= 55; // Changed from 60 to 55
+  const isOverboughtCrossDown = prevRsi > 55 && currentRsi <= 55; 
 
-  if (isDowntrend && isOverboughtCrossDown && isVolumeBreakout) {
-    return { triggered: true, direction: "short", reasons:["Trend Pullback Short (RSI Cross Down + Volume)"] };
+  if (isDowntrend && isOverboughtCrossDown && isVolumeBreakout && isTrending) {
+    return { triggered: true, direction: "short", reasons:["Trend Pullback Short (ADX > 20)"] };
   }
 
   return { triggered: false, direction: null, reasons };
