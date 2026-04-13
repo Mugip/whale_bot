@@ -3,8 +3,9 @@ import { TradeDirection } from "../state/schema";
 const ENTRY_FEE_PCT = 0.001;  
 const EXIT_FEE_PCT  = 0.001;  
 
-const ATR_TP1_MULT = 2.0; 
-const ATR_TP2_MULT = 5.0; // Increased from 4.0 to capture massive Altcoin trends
+// Mean Reversion Risk Math: Grab profit quickly (1.2), keep stop wide enough to survive the rubber band (2.0)
+const ATR_TP1_MULT = 1.2; 
+const ATR_TP2_MULT = 2.5; 
 
 export interface RiskCalculation {
   positionSizeUsd: number; entryPrice: number; effectiveEntryPrice: number; stopLoss: number;
