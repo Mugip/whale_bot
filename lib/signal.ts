@@ -7,21 +7,26 @@ export interface SignalResult {
 }
 
 export function evaluateSignal(features: FeatureSet): SignalResult {
-  const { currentPrice, currentRsi, bbUpper, bbLower } = features;
+  const { currentPrice, ema50, ema200, currentRsi, prevRsi, volumeRatio } = features;
+  const reasons: string[] =[];
 
-  // ─── LONG CONDITION: Price pierces bottom BB (2.5 StdDev) + RSI Panic ───
-  const isExtremePanic = currentPrice < bbLower && currentRsi < 30;
+  const isVolumeBreakout = volumeRatio >= 1.0; 
 
-  if (isExtremePanic) {
-    return { triggered: true, direction: "long", reasons:["Mean Reversion Long (Panic Bounce)"] };
+  // ─── LONG CONDITION: Trend + RSI Crosses back ABOVE 45 + High Volume ───
+  const isUptrend = ema50 > ema200 && currentPrice > ema200;
+  const isOversoldCrossUp = prevRsi < 45 && currentRsi >= 45; 
+
+  if (isUptrend && isOversoldCrossUp && isVolumeBreakout) {
+    return { triggered: true, direction: "long", reasons:["Trend Pullback Long (RSI Cross Up + Volume)"] };
   }
 
-  // ─── SHORT CONDITION: Price pierces top BB (2.5 StdDev) + RSI Euphoria ───
-  const isExtremeEuphoria = currentPrice > bbUpper && currentRsi > 70;
+  // ─── SHORT CONDITION: Trend + RSI Crosses back BELOW 55 + High Volume ───
+  const isDowntrend = ema50 < ema200 && currentPrice < ema200;
+  const isOverboughtCrossDown = prevRsi > 55 && currentRsi <= 55; 
 
-  if (isExtremeEuphoria) {
-    return { triggered: true, direction: "short", reasons:["Mean Reversion Short (Euphoria Fade)"] };
+  if (isDowntrend && isOverboughtCrossDown && isVolumeBreakout) {
+    return { triggered: true, direction: "short", reasons:["Trend Pullback Short (RSI Cross Down + Volume)"] };
   }
 
-  return { triggered: false, direction: null, reasons:[] };
+  return { triggered: false, direction: null, reasons };
 }
