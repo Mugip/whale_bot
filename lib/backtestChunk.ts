@@ -100,7 +100,7 @@ export function runChunk(
 
     const features: FeatureSet = {
       currentPrice: bar.close,
-      ema200, ema50, currentRsi, prevRsi, atr, volumeRatio,adx,
+      ema200, ema50, currentRsi, prevRsi, atr, volumeRatio, adx,
       isGreen: bar.close > bar.open, isRed: bar.close < bar.open
     };
 
