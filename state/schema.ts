@@ -34,13 +34,9 @@ export function createDefaultState(): BotState {
 
 export interface FeatureSet {
   currentPrice: number;
-  ema200: number;
-  ema50: number;
   currentRsi: number;
-  prevRsi: number;
   atr: number;
-  volumeRatio: number; 
-  adx: number; // <-- ADDED ADX
-  isGreen: boolean;
-  isRed: boolean;
+  bbUpper: number;
+  bbLower: number;
+  bbMiddle: number;
 }
