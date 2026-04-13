@@ -137,3 +137,65 @@ export function computeEMA(candles: OKXCandle[], period: number = 200): number {
   
   return ema;
 }
+
+/**
+ * Computes the Average Directional Index (ADX) to measure trend strength.
+ */
+export function computeADX(candles: OKXCandle[], period: number = 14): number {
+  if (candles.length < period * 2) return 0;
+
+  const tr: number[] = [];
+  const plusDM: number[] =[];
+  const minusDM: number[] =[];
+
+  for (let i = 1; i < candles.length; i++) {
+    const high = candles[i].high;
+    const low = candles[i].low;
+    const prevHigh = candles[i - 1].high;
+    const prevLow = candles[i - 1].low;
+    const prevClose = candles[i - 1].close;
+
+    tr.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
+
+    const upMove = high - prevHigh;
+    const downMove = prevLow - low;
+
+    if (upMove > downMove && upMove > 0) {
+      plusDM.push(upMove);
+      minusDM.push(0);
+    } else if (downMove > upMove && downMove > 0) {
+      plusDM.push(0);
+      minusDM.push(downMove);
+    } else {
+      plusDM.push(0);
+      minusDM.push(0);
+    }
+  }
+
+  // Wilder's Smoothing
+  let smoothedTR = tr.slice(0, period).reduce((a, b) => a + b, 0);
+  let smoothedPlusDM = plusDM.slice(0, period).reduce((a, b) => a + b, 0);
+  let smoothedMinusDM = minusDM.slice(0, period).reduce((a, b) => a + b, 0);
+
+  const dx: number[] =[];
+
+  for (let i = period; i < tr.length; i++) {
+    smoothedTR = smoothedTR - (smoothedTR / period) + tr[i];
+    smoothedPlusDM = smoothedPlusDM - (smoothedPlusDM / period) + plusDM[i];
+    smoothedMinusDM = smoothedMinusDM - (smoothedMinusDM / period) + minusDM[i];
+
+    const plusDI = (smoothedPlusDM / smoothedTR) * 100;
+    const minusDI = (smoothedMinusDM / smoothedTR) * 100;
+
+    const currentDX = (Math.abs(plusDI - minusDI) / (plusDI + minusDI)) * 100;
+    dx.push(currentDX || 0);
+  }
+
+  // Calculate ADX
+  let adx = dx.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < dx.length; i++) {
+    adx = ((adx * (period - 1)) + dx[i]) / period;
+  }
+
+  return adx;
+}
