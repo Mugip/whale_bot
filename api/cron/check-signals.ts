@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { loadState, saveState } from "../../lib/redis";
 import { fetchCandles, fetchMarkPrice } from "../../lib/okx";
-import { computeRSI, computeATR, computeEMA, computeVolumeRatio } from "../../lib/indicators";
+import { computeRSI, computeATR, computeEMA, computeVolumeRatio, computeADX } from "./indicators";
 import { calculateRisk } from "../../lib/risk";
 import { evaluateSignal } from "../../lib/signal";
 import { openPosition, updatePositions } from "../trade/execute";
@@ -44,11 +44,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const atr = computeATR(candles1h, 14);
     const ema200 = computeEMA(candles1h, 200);
     const ema50 = computeEMA(candles1h, 50);
+    const adx = computeADX(slice as any, 14);
 
     const lastCandle = candles15m[candles15m.length - 1];
 
     const features: FeatureSet = {
-      currentPrice, ema200, ema50, currentRsi, prevRsi, atr, volumeRatio,
+      currentPrice, ema200, ema50, currentRsi, prevRsi, atr, volumeRatio, adx,
       isGreen: lastCandle.close > lastCandle.open, isRed: lastCandle.close < lastCandle.open
     };
 
