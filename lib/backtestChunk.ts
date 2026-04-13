@@ -1,5 +1,5 @@
 import { ChunkState } from "./backtestRedis";
-import { computeRSI, computeATR, computeEMA, computeVolumeRatio, computeADX } from "./indicators";
+import { computeRSI, computeATR, computeBollingerBands } from "./indicators";
 import { calculateRisk, TP1_CLOSE_FRACTION } from "./risk";
 import { evaluateSignal } from "./signal";
 import { FeatureSet } from "../state/schema";
@@ -46,6 +46,7 @@ export function runChunk(
         t.size *= (1 - TP1_CLOSE_FRACTION);
         t.notional *= (1 - TP1_CLOSE_FRACTION);
         
+        // For high win-rate scalping, move stop to BE after TP1
         t.stop = t.entry; 
       }
 
@@ -83,31 +84,28 @@ export function runChunk(
     if (state.trade) continue;
 
     const lastTradeBar = state.trades.length > 0 ? state.trades[state.trades.length - 1].bar : -999;
-    if (i < 200) continue; 
+    if (i < 50) continue; // Less warmup needed for BBs
     if (i - lastTradeBar < 4) continue; 
 
-    const slice = bars.slice(Math.max(0, i - 200), i + 1);
+    const slice = bars.slice(Math.max(0, i - 100), i + 1);
     
-    const rsiValues   = computeRSI(slice as any, 14);
-    const atr         = computeATR(slice as any, 14);
-    const ema200      = computeEMA(slice as any, 200);
-    const ema50       = computeEMA(slice as any, 50);
-    const volumeRatio = computeVolumeRatio(slice as any, 20); 
-    const adx         = computeADX(slice as any, 14); // FIXED: ADX included
+    const rsiValues = computeRSI(slice as any, 14);
+    const atr       = computeATR(slice as any, 14);
+    const bb        = computeBollingerBands(slice as any, 20, 2.5); // 2.5 Standard Deviations
     
     const currentRsi = rsiValues[rsiValues.length - 1];
-    const prevRsi    = rsiValues[rsiValues.length - 2];
 
     const features: FeatureSet = {
       currentPrice: bar.close,
-      ema200, ema50, currentRsi, prevRsi, atr, volumeRatio, adx,
-      isGreen: bar.close > bar.open, isRed: bar.close < bar.open
+      currentRsi, atr,
+      bbUpper: bb.upper, bbMiddle: bb.middle, bbLower: bb.lower
     };
 
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
 
-    const baseStop = signal.direction === "long" ? bar.close - (atr * 2.5) : bar.close + (atr * 2.5);
+    // Hard 2.0 ATR stop
+    const baseStop = signal.direction === "long" ? bar.close - (atr * 2.0) : bar.close + (atr * 2.0);
     const risk = calculateRisk(signal.direction, bar.close, baseStop, atr, state.balance);
 
     state.trade = {
@@ -120,4 +118,4 @@ export function runChunk(
 
   state.nextIndex = end;
   return { state, trades, nextIndex: end, done: end >= bars.length };
-}
+  }
