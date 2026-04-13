@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const symbol = process.env.TRADING_SYMBOL ?? "ETH-USDT-SWAP"; // Automatically set for ETH
+  const symbol = process.env.TRADING_SYMBOL ?? "ETH-USDT-SWAP";
   let state = await loadState();
 
   try {
@@ -44,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const atr = computeATR(candles1h, 14);
     const ema200 = computeEMA(candles1h, 200);
     const ema50 = computeEMA(candles1h, 50);
-    const adx = computeADX(slice as any, 14);
+    const adx = computeADX(candles1h, 14); // FIXED: Uses candles1h
 
     const lastCandle = candles15m[candles15m.length - 1];
 
@@ -57,7 +57,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const signal = evaluateSignal(features);
 
     if (signal.triggered && signal.direction && !hasOpenPosition) {
-      // 2.5 ATR STOP for Altcoins
       const baseStop = signal.direction === "long" ? currentPrice - (atr * 2.5) : currentPrice + (atr * 2.5);
       const risk = calculateRisk(signal.direction, currentPrice, baseStop, atr, state.accountBalance);
 
