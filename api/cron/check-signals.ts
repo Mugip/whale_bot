@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { loadState, saveState } from "../../lib/redis";
 import { fetchCandles, fetchMarkPrice } from "../../lib/okx";
-import { computeRSI, computeATR, computeEMA, computeVolumeRatio, computeADX } from "../../lib/indicators";
+import { computeRSI, computeATR, computeBollingerBands } from "../../lib/indicators";
 import { calculateRisk } from "../../lib/risk";
 import { evaluateSignal } from "../../lib/signal";
 import { openPosition, updatePositions } from "../trade/execute";
@@ -20,8 +20,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   try {
     const[candles15m, candles1h, markPrice] = await Promise.all([
-        fetchCandles(symbol, "15m", 30),
-        fetchCandles(symbol, "1H", 250), 
+        fetchCandles(symbol, "15m", 100), // 100 bars is plenty to warm up 20-period Bollinger Bands
+        fetchCandles(symbol, "1H", 50),   // 50 bars is plenty for 14-period ATR
         fetchMarkPrice(symbol),
     ]);
 
@@ -37,29 +37,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const rsiValues = computeRSI(candles15m, 14);
-    const volumeRatio = computeVolumeRatio(candles15m, 20); 
     const currentRsi = rsiValues[rsiValues.length - 1];
-    const prevRsi = rsiValues[rsiValues.length - 2];
     
     const atr = computeATR(candles1h, 14);
-    const ema200 = computeEMA(candles1h, 200);
-    const ema50 = computeEMA(candles1h, 50);
-    const adx = computeADX(candles1h, 14); // FIXED: Uses candles1h
-
-    const lastCandle = candles15m[candles15m.length - 1];
+    const bb = computeBollingerBands(candles15m, 20, 2.5); // 2.5 StdDev BB
 
     const features: FeatureSet = {
-      currentPrice, ema200, ema50, currentRsi, prevRsi, atr, volumeRatio, adx,
-      isGreen: lastCandle.close > lastCandle.open, isRed: lastCandle.close < lastCandle.open
+      currentPrice, currentRsi, atr,
+      bbUpper: bb.upper, bbMiddle: bb.middle, bbLower: bb.lower
     };
 
     const hasOpenPosition = state.openPositions.length > 0;
     const signal = evaluateSignal(features);
 
     if (signal.triggered && signal.direction && !hasOpenPosition) {
-      const baseStop = signal.direction === "long" ? currentPrice - (atr * 2.5) : currentPrice + (atr * 2.5);
+      // Hard 2.0 ATR STOP
+      const baseStop = signal.direction === "long" ? currentPrice - (atr * 2.0) : currentPrice + (atr * 2.0);
       const risk = calculateRisk(signal.direction, currentPrice, baseStop, atr, state.accountBalance);
 
+      // Pass 0 for whale score / volume since they are no longer required in Telegram alerts
       await alertSignalTriggered(signal.direction, symbol, currentPrice, 0, 0); 
       state = await openPosition(state, signal.direction, symbol, risk);
     }
@@ -69,4 +65,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
-}
+      }
