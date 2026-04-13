@@ -27,7 +27,7 @@ export interface BotState {
 
 export function createDefaultState(): BotState {
   return {
-    openPositions:[], tradeHistory: [], lastSignalTimestamp: 0,
+    openPositions:[], tradeHistory:[], lastSignalTimestamp: 0,
     whaleScoreHistory:[], accountBalance: parseFloat(process.env.PAPER_INITIAL_BALANCE ?? "10000"), lastUpdated: Date.now(),
   };
 }
@@ -39,7 +39,8 @@ export interface FeatureSet {
   currentRsi: number;
   prevRsi: number;
   atr: number;
-  volumeRatio: number; // <-- Added back
+  volumeRatio: number; 
+  adx: number; // <-- ADDED ADX
   isGreen: boolean;
   isRed: boolean;
 }
