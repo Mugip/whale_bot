@@ -1,4 +1,4 @@
-import { computeRSI, computeATR, computeEMA, computeVolumeRatio } from "./indicators";
+import { computeRSI, computeATR, computeEMA, computeVolumeRatio, computeADX } from "./indicators";
 import { calculateRisk, TP1_CLOSE_FRACTION } from "./risk";
 import { evaluateSignal } from "./signal";
 import { OKXCandle } from "./okx";
@@ -91,13 +91,14 @@ export function runBacktest(
     const volumeRatio = computeVolumeRatio(slice15m, 20);
     const atr         = computeATR(slice1h, 14);        
     const ema200      = computeEMA(slice1h, 200);    
-    const ema50       = computeEMA(slice1h, 50);      
+    const ema50       = computeEMA(slice1h, 50);  
+    const adx         = computeADX(slice as any, 14);
 
     const currentRsi = rsiValues[rsiValues.length - 1];
     const prevRsi = rsiValues[rsiValues.length - 2];
 
     const features: FeatureSet = {
-      currentPrice: bar.close, ema200, ema50, currentRsi, prevRsi, atr, volumeRatio,
+      currentPrice: bar.close, ema200, ema50, currentRsi, prevRsi, atr, volumeRatio, adx,
       isGreen: bar.close > bar.open, isRed: bar.close < bar.open
     };
 
