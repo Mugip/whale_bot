@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { loadState, saveState } from "../../lib/redis";
 import { fetchCandles, fetchMarkPrice } from "../../lib/okx";
-import { computeRSI, computeATR, computeEMA, computeVolumeRatio, computeADX } from "./indicators";
+import { computeRSI, computeATR, computeEMA, computeVolumeRatio, computeADX } from "../../lib/indicators";
 import { calculateRisk } from "../../lib/risk";
 import { evaluateSignal } from "../../lib/signal";
 import { openPosition, updatePositions } from "../trade/execute";
