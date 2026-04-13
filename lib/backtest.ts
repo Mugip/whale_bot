@@ -1,4 +1,4 @@
-import { computeRSI, computeATR, computeEMA, computeVolumeRatio, computeADX } from "./indicators";
+import { computeRSI, computeATR, computeBollingerBands } from "./indicators";
 import { calculateRisk, TP1_CLOSE_FRACTION } from "./risk";
 import { evaluateSignal } from "./signal";
 import { OKXCandle } from "./okx";
@@ -15,7 +15,7 @@ export interface BacktestResult {
 }
 
 export function runBacktest(
-  candles15m: OKXCandle[], candles1h: OKXCandle[], initialBalance = 10_000, warmupBars = 200 
+  candles15m: OKXCandle[], candles1h: OKXCandle[], initialBalance = 10_000, warmupBars = 50 
 ): BacktestResult {
   const trades: BacktestTrade[] =[];
   let balance = initialBalance;
@@ -53,6 +53,8 @@ export function runBacktest(
         balance += openTrade.notional * TP1_CLOSE_FRACTION * partialPnl;
         openTrade.size *= 1 - TP1_CLOSE_FRACTION;
         openTrade.notional *= 1 - TP1_CLOSE_FRACTION;
+        
+        // Move stop to entry after TP1 hit to guarantee a risk-free trade
         openTrade.stopLoss = openTrade.entryPrice;
       }
 
@@ -84,28 +86,26 @@ export function runBacktest(
       continue; 
     }
 
-    if (slice1h.length < 200) continue; 
-    if (i - lastTradeBar < 4) continue; 
+    if (slice15m.length < 50) continue; // BB needs less warmup than EMA
+    if (i - lastTradeBar < 4) continue; // Short 1-hour cooldown 
 
-    const rsiValues   = computeRSI(slice15m, 14); 
-    const volumeRatio = computeVolumeRatio(slice15m, 20);
-    const atr         = computeATR(slice1h, 14);        
-    const ema200      = computeEMA(slice1h, 200);    
-    const ema50       = computeEMA(slice1h, 50);      
-    const adx         = computeADX(slice1h, 14); // FIXED: Uses slice1h
+    const rsiValues = computeRSI(slice15m, 14); 
+    const bb        = computeBollingerBands(slice15m, 20, 2.5); // 15m Bollinger Bands
+    const atr       = computeATR(slice1h, 14); // 1H ATR for macro volatility sizing       
 
     const currentRsi = rsiValues[rsiValues.length - 1];
-    const prevRsi = rsiValues[rsiValues.length - 2];
 
     const features: FeatureSet = {
-      currentPrice: bar.close, ema200, ema50, currentRsi, prevRsi, atr, volumeRatio, adx,
-      isGreen: bar.close > bar.open, isRed: bar.close < bar.open
+      currentPrice: bar.close,
+      currentRsi, atr,
+      bbUpper: bb.upper, bbMiddle: bb.middle, bbLower: bb.lower
     };
 
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
 
-    const baseStop = signal.direction === "long" ? bar.close - (atr * 2.5) : bar.close + (atr * 2.5);
+    // Hard 2.0 ATR stop
+    const baseStop = signal.direction === "long" ? bar.close - (atr * 2.0) : bar.close + (atr * 2.0);
     const risk = calculateRisk(signal.direction, bar.close, baseStop, atr, balance);
 
     openTrade = {
@@ -142,4 +142,4 @@ export function runBacktest(
   const sharpeApprox = variance > 0 ? mean / Math.sqrt(variance) : 0;
 
   return { trades, totalTrades: trades.length, winRate, avgPnlPct, totalPnlPct, maxDrawdownPct, profitFactor, sharpeApprox };
-}
+          }
