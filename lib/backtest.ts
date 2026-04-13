@@ -53,8 +53,6 @@ export function runBacktest(
         balance += openTrade.notional * TP1_CLOSE_FRACTION * partialPnl;
         openTrade.size *= 1 - TP1_CLOSE_FRACTION;
         openTrade.notional *= 1 - TP1_CLOSE_FRACTION;
-        
-        // SMART BREAKEVEN: Move stop to entry
         openTrade.stopLoss = openTrade.entryPrice;
       }
 
@@ -90,7 +88,7 @@ export function runBacktest(
     if (i - lastTradeBar < 4) continue; 
 
     const rsiValues   = computeRSI(slice15m, 14); 
-    const volumeRatio = computeVolumeRatio(slice15m, 20); // Added volume here
+    const volumeRatio = computeVolumeRatio(slice15m, 20);
     const atr         = computeATR(slice1h, 14);        
     const ema200      = computeEMA(slice1h, 200);    
     const ema50       = computeEMA(slice1h, 50);      
@@ -106,8 +104,8 @@ export function runBacktest(
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
 
-    // 2.0 ATR STOP
-    const baseStop = signal.direction === "long" ? bar.close - (atr * 2.0) : bar.close + (atr * 2.0);
+    // 2.5 ATR STOP for Altcoins
+    const baseStop = signal.direction === "long" ? bar.close - (atr * 2.5) : bar.close + (atr * 2.5);
     const risk = calculateRisk(signal.direction, bar.close, baseStop, atr, balance);
 
     openTrade = {
@@ -144,4 +142,4 @@ export function runBacktest(
   const sharpeApprox = variance > 0 ? mean / Math.sqrt(variance) : 0;
 
   return { trades, totalTrades: trades.length, winRate, avgPnlPct, totalPnlPct, maxDrawdownPct, profitFactor, sharpeApprox };
-}
+      }
