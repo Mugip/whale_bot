@@ -46,7 +46,7 @@ export function runChunk(
         t.size *= (1 - TP1_CLOSE_FRACTION);
         t.notional *= (1 - TP1_CLOSE_FRACTION);
         
-        t.stop = t.entry; // Move to Breakeven
+        t.stop = t.entry; 
       }
 
       let closed = false;
@@ -93,7 +93,7 @@ export function runChunk(
     const ema200      = computeEMA(slice as any, 200);
     const ema50       = computeEMA(slice as any, 50);
     const volumeRatio = computeVolumeRatio(slice as any, 20); 
-    const adx         = computeADX(slice as any, 14);
+    const adx         = computeADX(slice as any, 14); // FIXED: ADX included
     
     const currentRsi = rsiValues[rsiValues.length - 1];
     const prevRsi    = rsiValues[rsiValues.length - 2];
@@ -107,7 +107,6 @@ export function runChunk(
     const signal = evaluateSignal(features);
     if (!signal.triggered || !signal.direction) continue;
 
-    // Base stop widened to 2.5 ATR for Altcoins
     const baseStop = signal.direction === "long" ? bar.close - (atr * 2.5) : bar.close + (atr * 2.5);
     const risk = calculateRisk(signal.direction, bar.close, baseStop, atr, state.balance);
 
